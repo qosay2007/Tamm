@@ -1,0 +1,12 @@
+create table public.staff_roles(user_id uuid primary key references auth.users(id),role text not null check(role in ('admin','marketer','support')));
+alter table public.staff_roles enable row level security;
+revoke all on public.staff_roles from anon,authenticated;
+grant select on public.staff_roles to authenticated;
+create policy staff_self on public.staff_roles for select to authenticated using(user_id=(select auth.uid()));
+create policy admin_orders_read on public.orders for select to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
+create policy admin_profiles_read on public.profiles for select to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
+grant update(status) on public.orders to authenticated;
+create policy admin_orders_update on public.orders for update to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin')) with check(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
+grant update(price_fils,active,title) on public.services to authenticated;
+create policy admin_services_read on public.services for select to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
+create policy admin_services_update on public.services for update to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin')) with check(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
