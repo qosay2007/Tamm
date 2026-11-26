@@ -1,0 +1,12 @@
+create table public.marketers(user_id uuid primary key references public.staff_roles(user_id), referral_code text not null unique default replace(gen_random_uuid()::text,'-',''), active boolean not null default true);
+alter table public.marketers enable row level security;
+revoke all on public.marketers from anon,authenticated;
+grant select on public.marketers to authenticated;
+create policy marketer_self on public.marketers for select to authenticated using(user_id=(select auth.uid()));
+create policy marketer_admin on public.marketers for select to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
+create table public.commissions(order_id uuid primary key references public.orders(id),marketer_id uuid not null references public.marketers(user_id),amount_fils integer not null check(amount_fils>=0),created_at timestamptz not null default now());
+alter table public.commissions enable row level security;
+revoke all on public.commissions from anon,authenticated;
+grant select on public.commissions to authenticated;
+create policy commission_self on public.commissions for select to authenticated using(marketer_id=(select auth.uid()));
+create policy commission_admin on public.commissions for select to authenticated using(exists(select 1 from public.staff_roles where user_id=(select auth.uid()) and role='admin'));
