@@ -31,7 +31,6 @@ async function loadDocument() {
   }
 }
 $('retry').onclick = loadDocument;
-await loadDocument();
 
 const el = (tag, className = '', text = '') => {
   const item = document.createElement(tag);
@@ -314,3 +313,8 @@ async function renderDocument(doc, error) {
   say(tier === 'vip' ? `منتج VIP جاهز — ${tierNames[tier]}. استخدم زر الطباعة لحفظ نسخة PDF.` : `المنتج الرقمي جاهز — ${tierNames[tier] || tierNames.basic}.`);
   $('print').onclick = () => window.print();
 }
+
+// Start only after the renderer helpers above have been initialized. A valid
+// document reaches renderDocument asynchronously, and starting here avoids a
+// temporal-dead-zone error on helpers such as `el`.
+await loadDocument();
