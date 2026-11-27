@@ -9,14 +9,15 @@ let marketersCount = 0;
 let marketers = [];
 const statuses = { pending:'قيد المراجعة', paid:'مدفوع', fulfilled:'مكتمل', cancelled:'ملغى' };
 const money = (fils) => (Number(fils || 0) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
+const trackingCode = (number) => number == null ? '' : String(number).padStart(6, '0');
 const button = (text, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = onClick; return b; };
 
 async function renderOrders() {
   const query = $('search').value.trim().toLocaleLowerCase();
-  const visible = orders.filter((o) => [o.id,o.service_id,o.details?.name,o.details?.phone,o.payment_reference,o.coupon_code].some((v) => String(v || '').toLocaleLowerCase().includes(query))).slice(0,100);
+  const visible = orders.filter((o) => [o.tracking_number == null ? '' : trackingCode(o.tracking_number),o.id,o.service_id,o.details?.name,o.details?.phone,o.payment_reference,o.coupon_code].some((v) => String(v || '').toLocaleLowerCase().includes(query))).slice(0,100);
   $('orders').replaceChildren(...await Promise.all(visible.map(async (order) => {
     const card = document.createElement('article'), p = document.createElement('p'), meta = document.createElement('p'), pay = document.createElement('p'), select = document.createElement('select'), actions = document.createElement('div');
-    p.textContent = `${order.id} | ${order.service_id} | ${tierNames[order.package_tier] || tierNames.basic} | ${money(order.price_fils)}${order.discount_fils ? ` (خصم ${money(order.discount_fils)} — ${order.coupon_code || ''})` : ''}`;
+    p.textContent = `طلب ${trackingCode(order.tracking_number) || 'قديم'} | ${order.service_id} | ${tierNames[order.package_tier] || tierNames.basic} | ${money(order.price_fils)}${order.discount_fils ? ` (خصم ${money(order.discount_fils)} — ${order.coupon_code || ''})` : ''}`;
     meta.textContent = `العميل: ${order.details?.name || '—'} | الهاتف: ${order.details?.phone || '—'} | التفاصيل: ${order.details?.text || '—'}`;
     pay.textContent = `حساب CliQ: ${order.cliq_account_id || '—'} | مرجع التحويل: ${order.payment_reference || 'لم يُرسل'}`;
     select.replaceChildren(...Object.entries(statuses).filter(([key]) => key === order.status || (order.status === 'pending' && ['paid','cancelled'].includes(key)) || (order.status === 'paid' && key === 'fulfilled')).map(([key,label]) => new Option(label,key,false,key === order.status)));

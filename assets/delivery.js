@@ -1,13 +1,23 @@
 import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
 import { db, $, tierNames, say } from './shared.js';
-const id = new URLSearchParams(location.search).get('id');
+const query = new URLSearchParams(location.search);
+const id = query.get('id');
+const trackingNumber = query.get('number');
+const accessToken = new URLSearchParams(location.hash.slice(1)).get('key');
 const labels = { qr:'رمز QR',cv:'السيرة الذاتية',certificate:'شهادة تقدير',birthday:'دعوة عيد ميلاد',wedding:'دعوة زفاف',card:'بطاقة أعمال',links:'روابط شخصية',website:'موقع شخصي',menu:'قائمة الطعام',catalog:'كتالوج المنتجات' };
-if (!id || !/^[0-9a-f-]{36}$/i.test(id)) say('رابط الاستلام غير صالح.');
+if (trackingNumber && /^[0-9]{6,20}$/.test(trackingNumber) && /^[0-9a-f]{64}$/.test(accessToken || '')) {
+  const { data, error } = await db.rpc('get_generated_document_v3', { p_tracking_number: trackingNumber, p_access_token: accessToken });
+  await renderDocument(data?.[0], error);
+}
+else if (!id || !/^[0-9a-f-]{36}$/i.test(id)) say('رابط الاستلام غير صالح.');
 else {
   const { data, error } = await db.rpc('get_generated_document', { p_order: id });
-  const doc = data?.[0];
-  if (error || !doc) say('التصميم غير متاح بعد. تأكد من اعتماد الدفع من صفحة متابعة الطلب.');
-  else {
+  await renderDocument(data?.[0],error);
+}
+
+async function renderDocument(doc,error){
+  if (error || !doc) { say('التصميم غير متاح بعد أو أن رابط الوصول غير صالح.'); return; }
+  {
     const content = doc.content || {}, tier = content.package_tier || 'basic';
     $('title').textContent = labels[doc.service_id] || 'تصميم تمّ'; $('doc').classList.add(doc.service_id, tier);
     $('doc').dataset.tier = tierNames[tier] || tierNames.basic;
