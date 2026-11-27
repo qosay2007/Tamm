@@ -85,8 +85,8 @@ function addRepeatFields(kind) {
   const append = () => {
     if (wrap.querySelectorAll('.repeat-row').length >= 15) return;
     const row = document.createElement('div'); row.className = 'repeat-row box';
-    const labels = kind === 'links' ? ['اسم الرابط', 'الرابط HTTPS'] : ['الاسم', 'السعر بالدينار', 'الوصف'];
-    for (const label of labels) { const input = document.createElement('input'); input.placeholder = label; input.maxLength = 180; input.required = label !== 'الوصف'; input.dataset.label = label;
+    const labels = kind === 'links' ? ['اسم الرابط', 'الرابط HTTPS'] : ['اسم المنتج أو الصنف', 'القسم (اختياري)', 'السعر بالدينار', 'الوصف (اختياري)'];
+    for (const label of labels) { const input = document.createElement('input'); input.placeholder = label; input.maxLength = 180; input.required = label === 'اسم المنتج أو الصنف' || label === 'السعر بالدينار' || label === 'اسم الرابط' || label === 'الرابط HTTPS'; input.dataset.label = label;
       if (label.includes('السعر')) { input.type = 'number'; input.min = '0'; input.step = '.001'; }
       if (label.includes('HTTPS')) input.type = 'url'; row.append(input); }
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'حذف'; remove.onclick = () => { if (wrap.querySelectorAll('.repeat-row').length > 1) row.remove(); };
@@ -97,24 +97,27 @@ function addRepeatFields(kind) {
 }
 
 function buildFields(meta) {
-  if (meta.repeat) return addRepeatFields(meta.repeat);
-  if (!meta.fields.length) return null;
+  if (!meta.fields.length) return () => [];
+  const inputs = [];
   for (const [index, name] of meta.fields.entries()) {
     const label = document.createElement('label'); label.textContent = name;
-    const input = document.createElement('input'); input.maxLength = 350; input.required = index === 0; input.dataset.field = name;
+    const input = document.createElement('input'); input.maxLength = 350; input.required = (meta.required || [meta.fields[0]]).includes(name); input.dataset.field = name;
+    input.type = meta.inputTypes?.[name] || 'text';
+    if (input.type === 'url') input.placeholder = 'https://';
+    if (input.type === 'tel') { input.autocomplete = 'tel'; input.inputMode = 'tel'; }
     label.append(input); $('fields').append(label);
+    inputs.push(input);
   }
-  $('detailsLabel').hidden = true; $('details').required = false;
-  return null;
+  return () => inputs.filter((input) => input.value.trim()).map((input) => [input.dataset.field, input.value.trim()]);
 }
 
 function setPackage(tier) {
-  const uploadMax = tier === 'vip' ? 5 : tier === 'advanced' ? 3 : 0;
+  const uploadMax = Number(services[serviceId]?.uploadLimits?.[tier] || 0);
   $('uploadsBox').hidden = uploadMax === 0;
   $('uploads').dataset.max = String(uploadMax);
   $('uploads').disabled = uploadMax === 0;
   $('uploads').value = '';
-  $('uploadHint').textContent = tier === 'vip' ? 'حتى 5 صور أو ملفات مرجعية خاصة بالتصميم.' : 'حتى 3 صور أو ملفات مرجعية خاصة بالتصميم.';
+  $('uploadHint').textContent = uploadMax === 1 ? 'أرفق صورة واحدة اختيارية لتخصيص التصميم، حتى 10 ميغابايت.' : `أرفق حتى ${uploadMax} صور أو ملفات مرجعية، حتى 10 ميغابايت للملف.`;
   $('price').textContent = `سعر الباقة ${tierNames[tier]}: ${fmt(packageRows.find((item) => item.tier === tier)?.price_fils || service.price_fils)}`;
 }
 
@@ -154,24 +157,25 @@ async function initNew() {
   packageRows = [{ tier: 'basic', price_fils: service.price_fils }, ...(packages || [])];
   $('tier').replaceChildren(...packageRows.map((row) => new Option(`${tierNames[row.tier]} — ${fmt(row.price_fils)}`, row.tier)));
   $('tier').value = ['basic','advanced','vip'].includes(q.get('tier')) && packageRows.some((row) => row.tier === q.get('tier')) ? q.get('tier') : 'basic';
-  const repeatValues = buildFields(meta);
+  const collectFields = buildFields(meta);
+  const repeatValues = meta.repeat ? addRepeatFields(meta.repeat, serviceId) : null;
+  if (meta.fields.length) { $('detailsLabel').hidden = true; $('details').required = false; }
   $('tier').onchange = () => setPackage($('tier').value); setPackage($('tier').value);
   $('form').hidden = false;
   $('form').onsubmit = async (event) => {
     event.preventDefault();
+    const fieldRows = collectFields();
     let details = $('details').value.trim();
     if (repeatValues) {
       const rows = repeatValues();
-      if (rows.some((row) => row.some((value, i) => i < 2 && !value))) return say('أكمل بيانات كل عنصر قبل الإرسال.');
+      if (rows.some((row) => meta.repeat === 'links' ? (!row[0] || !row[1]) : (!row[0] || !row[2]))) return say('أكمل الاسم والسعر لكل عنصر قبل الإرسال.');
       if (meta.repeat === 'links') {
         if (rows.some((row) => { try { return new URL(row[1]).protocol !== 'https:'; } catch { return true; } })) return say('استخدم روابط HTTPS صالحة فقط.');
-        details = rows.map(([label,url]) => `${label} | ${url}`).join('\n');
-      } else details = rows.map((row) => `${row[0]} — ${row[1]} د.أ${row[2] ? ` — ${row[2]}` : ''}`).join('\n');
-    } else if (meta.fields.length) {
-      details = Array.from($('fields').querySelectorAll('input')).filter((input) => input.value.trim()).map((input) => `${input.dataset.field}: ${input.value.trim()}`).join('\n');
-    }
+        details = [...fieldRows.map(([key,value]) => `${key}: ${value}`), ...rows.map(([label,url]) => `رابط: ${label} | ${url}`)].join('\n');
+      } else details = [...fieldRows.map(([key,value]) => `${key}: ${value}`), ...rows.map((row) => `عنصر: ${row[0]} | ${row[1] || ''} | ${row[2]} | ${row[3] || ''}`)].join('\n');
+    } else if (fieldRows.length) details = fieldRows.map(([key,value]) => `${key}: ${value}`).join('\n');
     if (!details || details.length > 3000) return say('أدخل تفاصيل الطلب، بحد أقصى 3000 حرف.');
-    if (serviceId === 'qr') { try { const u = new URL(details); if (!['https:','http:'].includes(u.protocol)) throw new Error(); } catch { return say('أدخل رابط HTTP أو HTTPS صالحاً.'); } }
+    if (serviceId === 'qr') { try { const target = fieldRows.find(([key]) => key === 'الرابط')?.[1] || details; const u = new URL(target); if (!['https:','http:'].includes(u.protocol)) throw new Error(); } catch { return say('أدخل رابط HTTP أو HTTPS صالحاً.'); } }
     const tier = $('tier').value, files = Array.from($('uploads').files || []), max = Number($('uploads').dataset.max || 0);
     if (files.length > max) return say(`هذه الباقة تسمح بإرفاق ${max} ملفات كحد أقصى.`);
     if (files.some((file) => !safeFileExtension(file) || file.size < 1 || file.size > 10 * 1024 * 1024)) return say('الملفات المقبولة JPG وPNG وWEBP وHEIC وPDF، بحد أقصى 10 ميغابايت للملف.');

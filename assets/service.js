@@ -17,7 +17,8 @@ else {
       for (const tier of tiers) {
         const card = document.createElement('article'), title = document.createElement('h3'), price = document.createElement('strong'), list = document.createElement('ul'), button = document.createElement('a');
         title.textContent = tierNames[tier.tier]; price.textContent = money(tier.price_fils);
-        for (const benefit of tierFeatures[tier.tier]) { const li = document.createElement('li'); li.textContent = benefit; list.append(li); }
+        const benefits = tier.tier === 'basic' ? meta.features : (meta.tierFeatures?.[tier.tier] || tierFeatures[tier.tier]);
+        for (const benefit of benefits) { const li = document.createElement('li'); li.textContent = benefit; list.append(li); }
         list.className = 'features-list'; button.className = 'buy'; button.textContent = 'اطلب الآن';
         const params = new URLSearchParams({ service: id, tier: tier.tier }); if (q.get('ref')) params.set('ref', q.get('ref'));
         button.href = `order.html?${params}`; card.append(title, price, list, button); $('packages').append(card);
