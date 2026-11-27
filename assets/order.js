@@ -47,12 +47,22 @@ async function showPayment(id, summary) {
   $('payform').onsubmit = async (event) => {
     event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true;
     try {
+      const proof = $('paymentProof').files?.[0];
+      if (!proof) { say('أرفق صورة إثبات التحويل قبل الإرسال.'); return; }
+      const proofPath = await uploadPaymentProof(id, proof);
+      if (!(trackingCode && accessToken)) {
+        const { error: attachError } = await db.rpc('attach_guest_upload', {
+          p_order: id, p_path: proofPath, p_file_name: proof.name, p_content_type: proof.type, p_file_size: proof.size
+        });
+        if (attachError) { say('تعذر ربط صورة الإثبات بالطلب. تواصل مع الدعم قبل إعادة التحويل.'); return; }
+      }
       const { error: paymentError } = trackingCode && accessToken
-        ? await db.rpc('submit_guest_payment_v3', { p_tracking_number: trackingCode, p_access_token: accessToken, p_account: $('cliq').value, p_reference: $('reference').value.trim() })
+        ? await db.rpc('submit_guest_payment_v4', { p_tracking_number: trackingCode, p_access_token: accessToken, p_account: $('cliq').value, p_reference: $('reference').value.trim(), p_proof_path: proofPath })
         : await db.rpc('submit_guest_payment', { p_order: id, p_account: $('cliq').value, p_reference: $('reference').value.trim() });
-      if (paymentError) { say('تعذر إرسال المرجع. تحقق من عدم استخدام المرجع بطلب آخر.'); return; }
-      $('payment').hidden = true; say('تم إرسال مرجع التحويل للمراجعة. لا يبدأ تجهيز التصميم إلا بعد اعتماد الإدارة. رقم الطلب: ' + (trackingCode || 'طلب سابق'));
-    } finally { button.disabled = false; }
+      if (paymentError) { say('تعذر إرسال إثبات التحويل. تحقق من المرجع وحاول مرة أخرى.'); return; }
+      $('payment').hidden = true; say('تم إرسال مرجع التحويل وصورة الإثبات. يبدأ التجهيز بعد مراجعة وصول المبلغ. رقم الطلب: ' + (trackingCode || 'طلب سابق'));
+    } catch (error) { say(error.message || 'تعذر رفع صورة إثبات التحويل. حاول مرة أخرى.'); }
+    finally { button.disabled = false; }
   };
 }
 
@@ -121,6 +131,17 @@ async function uploadFiles(order, files) {
     if (attachError) failed.push(file.name);
   }
   return failed;
+}
+
+async function uploadPaymentProof(order, file) {
+  const ext = safeFileExtension(file);
+  if (!ext || ext === 'pdf' || !String(file.type).startsWith('image/') || file.size < 1 || file.size > 10 * 1024 * 1024) {
+    throw new Error('ارفع صورة JPG أو PNG أو WEBP أو HEIC واضحة، وحجمها أقل من 10 ميغابايت.');
+  }
+  const path = `${order}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await db.storage.from('tamm-order-files').upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error('تعذر رفع الصورة. تحقق من اتصال الإنترنت وحاول مرة أخرى.');
+  return path;
 }
 
 async function initNew() {

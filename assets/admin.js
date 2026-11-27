@@ -16,16 +16,24 @@ async function renderOrders() {
   const query = $('search').value.trim().toLocaleLowerCase();
   const visible = orders.filter((o) => [o.tracking_number == null ? '' : trackingCode(o.tracking_number),o.id,o.service_id,o.details?.name,o.details?.phone,o.payment_reference,o.coupon_code].some((v) => String(v || '').toLocaleLowerCase().includes(query))).slice(0,100);
   $('orders').replaceChildren(...await Promise.all(visible.map(async (order) => {
-    const card = document.createElement('article'), p = document.createElement('p'), meta = document.createElement('p'), pay = document.createElement('p'), select = document.createElement('select'), actions = document.createElement('div');
+    const card = document.createElement('article'), p = document.createElement('p'), meta = document.createElement('p'), pay = document.createElement('p'), state = document.createElement('p'), actions = document.createElement('div');
     p.textContent = `طلب ${trackingCode(order.tracking_number) || 'قديم'} | ${order.service_id} | ${tierNames[order.package_tier] || tierNames.basic} | ${money(order.price_fils)}${order.discount_fils ? ` (خصم ${money(order.discount_fils)} — ${order.coupon_code || ''})` : ''}`;
     meta.textContent = `العميل: ${order.details?.name || '—'} | الهاتف: ${order.details?.phone || '—'} | التفاصيل: ${order.details?.text || '—'}`;
     pay.textContent = `حساب CliQ: ${order.cliq_account_id || '—'} | مرجع التحويل: ${order.payment_reference || 'لم يُرسل'}`;
-    select.replaceChildren(...Object.entries(statuses).filter(([key]) => key === order.status || (order.status === 'pending' && ['paid','cancelled'].includes(key)) || (order.status === 'paid' && key === 'fulfilled')).map(([key,label]) => new Option(label,key,false,key === order.status)));
+    state.textContent = `حالة الطلب: ${statuses[order.status] || order.status}`;
     actions.className = 'actions';
-    if (order.status === 'pending' && order.payment_reference) actions.append(button('اعتماد التحويل بعد التحقق', async () => {
-      if (!confirm(`تحقّق من وصول ${money(order.price_fils)} إلى الحساب المحدد ومن تطابق المرجع التالي قبل الاعتماد:\n${order.payment_reference}\n\nسيبدأ توليد التصميم آلياً بعد الاعتماد.`)) return;
-      await updateOrder(order, 'paid');
-    }));
+    if (order.payment_proof_path) {
+      const { data: proof, error: proofError } = await db.storage.from('tamm-order-files').createSignedUrl(order.payment_proof_path, 300);
+      if (!proofError && proof?.signedUrl) { const link=document.createElement('a');link.href=proof.signedUrl;link.target='_blank';link.rel='noopener';link.textContent='عرض إثبات التحويل';actions.append(link); }
+    }
+    if (order.status === 'pending' && order.payment_reference) {
+      const approve=button('تأكيد الطلب بعد التحقق',async()=>{
+        if (!confirm(`تحقّق من وصول ${money(order.price_fils)} فعلياً إلى الحساب ومن تطابق المرجع التالي:\n${order.payment_reference}\n\nبعد التأكيد سيبدأ تجهيز الطلب.`)) return;
+        await updateOrder(order, 'paid');
+      });
+      if (order.payment_proof_required && !order.payment_proof_path) { approve.disabled=true; approve.title='بانتظار إرفاق العميل صورة إثبات التحويل'; }
+      actions.append(approve);
+    }
     if (order.status === 'pending') actions.append(button(order.payment_reference ? 'رفض المرجع / إلغاء' : 'إلغاء الطلب', async () => {
       const prompt = order.payment_reference
         ? 'ألغِ الطلب فقط بعد التأكد من عدم وصول التحويل أو ردّ المبلغ للعميل. هل تأكدت؟'
@@ -40,13 +48,22 @@ async function renderOrders() {
       if (error || !data?.signedUrl) continue;
       const link = document.createElement('a'); link.href = data.signedUrl; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'ملف العميل: ' + (file.name || 'مرفق'); fileBox.append(link);
     }
-    card.append(p,meta,pay,select,actions,fileBox); return card;
+    if (order.status === 'pending' && !order.payment_reference) pay.textContent += ' — بانتظار إدخال العميل مرجع التحويل وإثباته.';
+    card.append(p,meta,state,pay,actions,fileBox); return card;
   })));
 }
 
 async function updateOrder(order, status) {
-  const { error } = await db.from('orders').update({ status }).eq('id',order.id).eq('status',order.status).select('id').single();
-  say(error ? `تعذر تحديث الطلب: ${error.message}` : (status === 'paid' ? 'تم اعتماد الدفع وبدء التوليد الآلي.' : 'تم تحديث حالة الطلب.'));
+  const { error } = await db.rpc('admin_set_order_status_v1', { p_order: order.id, p_status: status });
+  const reasons={
+    'Admin permission required':'هذا الحساب لا يملك صلاحية تأكيد الطلب.',
+    'Payment proof is required before approval':'لا يمكن تأكيد طلب جديد قبل إرفاق إثبات التحويل.',
+    'Customer has not submitted the transfer reference':'العميل لم يرسل مرجع التحويل بعد.',
+    'Order not found':'تعذر العثور على الطلب. حدّث الصفحة وحاول مجدداً.',
+    'Order is not awaiting payment':'تغيرت حالة الطلب. حدّث القائمة وحاول مجدداً.'
+  };
+  say(error ? (reasons[error.message] || `تعذر تحديث الطلب: ${error.message}`) : (status === 'paid' ? 'تم تأكيد الطلب بعد التحقق من التحويل.' : 'تم تحديث حالة الطلب.'));
+  if (error) return;
   await loadOrders(); await loadReports(); await loadQuickLinks();
 }
 

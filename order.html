@@ -24,7 +24,7 @@
     <button id="submit" type="submit">تأكيد الطلب</button>
   </form>
   <section id="payment" class="box" hidden><h2>الدفع عبر CliQ</h2><p id="payHint">حوّل المبلغ المعروض إلى الحساب المختار، ثم أدخل مرجع التحويل كما يظهر في تطبيق البنك.</p>
-    <form id="payform"><label>حساب CliQ<select id="cliq" required></select></label><label>مرجع التحويل<input id="reference" required minlength="3" maxlength="150" autocomplete="off"></label><button type="submit">إرسال مرجع التحويل للمراجعة</button></form>
+    <form id="payform"><label>حساب CliQ<select id="cliq" required></select></label><label>مرجع التحويل<input id="reference" required minlength="3" maxlength="150" autocomplete="off"></label><label>صورة إثبات التحويل<input id="paymentProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" required><span class="hint">ارفع صورة واضحة للتحويل، بصيغة JPG أو PNG أو WEBP أو HEIC، حتى 10 ميغابايت.</span></label><button type="submit">إرسال إثبات الدفع للمراجعة</button></form>
   </section>
   <p id="msg" role="status" aria-live="polite"></p>
   <section id="trackingBox" class="box" hidden><p>رقم تتبع طلبك</p><strong id="trackingNumber" class="tracking-code" dir="ltr"></strong><div class="tracking-actions"><button id="copyTracking" type="button">نسخ الرقم</button><button id="shareTracking" type="button">مشاركة رابط آمن</button></div><p class="hint">رقم التتبع وحده لا يكشف تفاصيل الطلب. احتفظ بالرابط الآمن للمتابعة.</p></section>
