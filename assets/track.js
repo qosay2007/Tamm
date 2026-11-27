@@ -4,7 +4,7 @@ const query=new URLSearchParams(location.search);
 const legacyId=query.get('id');
 let number=query.get('number')||'';
 let token=new URLSearchParams(location.hash.slice(1)).get('key')||'';
-const statuses={pending:'بانتظار الدفع',paid:'تم تأكيد الدفع — قيد التجهيز',fulfilled:'تم التسليم',cancelled:'الطلب ملغى'};
+const statuses={pending:'بانتظار الدفع أو التحقق من التحويل',paid:'تم تأكيد الدفع',preparing:'قيد التجهيز',ready:'جاهز للتسليم',fulfilled:'تم التسليم',cancelled:'الطلب ملغى'};
 const money=(fils)=>(Number(fils||0)/1000).toFixed(3).replace(/\.000$/,'')+' د.أ';
 const historyKey='tamm_order_access_v1';
 const safeUrl=(page)=>{const url=new URL(page,location.href);url.searchParams.set('number',number);url.hash=new URLSearchParams({key:token}).toString();return url.href;};
@@ -13,7 +13,7 @@ function readSavedOrders(){try{const rows=JSON.parse(localStorage.getItem(histor
 function rememberOrder(code,secret){try{const rows=readSavedOrders().filter(x=>x.number!==code);rows.unshift({number:code,token:secret,expires:Date.now()+30*24*60*60*1000});localStorage.setItem(historyKey,JSON.stringify(rows.slice(0,50)));}catch{}}
 
 function drawTimeline(events=[]){
-  const labels={order_received:'تم استلام الطلب',payment_submitted:'تم إرسال إثبات التحويل للمراجعة',paid:'تم تأكيد الدفع وبدء التجهيز',fulfilled:'تم التسليم',cancelled:'تم إلغاء الطلب'};
+  const labels={order_received:'تم استلام الطلب',payment_submitted:'تم إرسال إثبات التحويل للمراجعة',paid:'تم تأكيد الدفع',preparing:'بدأ تجهيز الطلب',ready:'الطلب جاهز للتسليم',fulfilled:'تم التسليم',cancelled:'تم إلغاء الطلب'};
   const time=(value)=>new Intl.DateTimeFormat('ar-JO',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Amman'}).format(new Date(value));
   const steps=events.filter((event)=>labels[event.event_key]&&event.created_at);
   $('timeline').replaceChildren(...steps.map((event,index)=>{const li=document.createElement('li');li.className=index===steps.length-1?'current':'done';const date=document.createElement('time');date.dateTime=event.created_at;date.textContent=time(event.created_at);li.append(document.createTextNode(`${labels[event.event_key]} — `),date);return li;}));
@@ -35,14 +35,14 @@ function showOrder(order,access={}){
   drawTimeline(access.events||[]);
   $('resume').hidden=true;$('delivery').hidden=true;
   if(order.status==='pending'&&!order.payment_submitted){$('resume').href=access.legacy?`order.html?order=${encodeURIComponent(legacyId)}`:`order.html?tracking=${encodeURIComponent(number)}#key=${encodeURIComponent(token)}`;$('resume').hidden=false;}
-  if(['paid','fulfilled'].includes(order.status)&&access.ready){$('delivery').href=access.legacy?`delivery.html?id=${encodeURIComponent(legacyId)}`:safeUrl('delivery.html');$('delivery').hidden=false;}
+  if(['paid','preparing','ready','fulfilled'].includes(order.status)&&access.ready){$('delivery').href=access.legacy?`delivery.html?id=${encodeURIComponent(legacyId)}`:safeUrl('delivery.html');$('delivery').hidden=false;}
 }
 
 async function lookupLegacy(){
   const {data,error}=await db.rpc('get_guest_order_summary',{p_order:legacyId});
   const order=data?.[0];if(error||!order){$('message').textContent='تعذر العثور على الطلب السابق.';return;}
   let ready=false;
-  if(['paid','fulfilled'].includes(order.status)){const generated=await db.rpc('get_generated_document',{p_order:legacyId});ready=!generated.error&&!!generated.data?.length;}
+  if(['paid','preparing','ready','fulfilled'].includes(order.status)){const generated=await db.rpc('get_generated_document',{p_order:legacyId});ready=!generated.error&&!!generated.data?.length;}
   showOrder({...order,service_title:order.service_id,tracking_number:'—'}, {legacy:true,ready,events:[]});
 }
 
@@ -60,7 +60,7 @@ async function lookupSecure(){
     $('orderNumber').value=number;$('accessKey').value='';$('keyField').hidden=true;
     history.replaceState(null,'',`track.html?number=${encodeURIComponent(number)}#key=${encodeURIComponent(token)}`);
     let ready=false;
-    if(['paid','fulfilled'].includes(order.status)){const generated=await db.rpc('get_generated_document_v3',{p_tracking_number:number,p_access_token:token});ready=!generated.error&&!!generated.data?.length;}
+    if(['paid','preparing','ready','fulfilled'].includes(order.status)){const generated=await db.rpc('get_generated_document_v3',{p_tracking_number:number,p_access_token:token});ready=!generated.error&&!!generated.data?.length;}
     const {data:events}=await db.rpc('get_guest_order_timeline_v3',{p_tracking_number:number,p_access_token:token});
     showOrder(order,{ready,events:events||[]});
   } finally {button.disabled=false;}

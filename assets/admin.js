@@ -7,7 +7,7 @@ let applications = [];
 let withdrawals = [];
 let marketersCount = 0;
 let marketers = [];
-const statuses = { pending:'قيد المراجعة', paid:'مدفوع', fulfilled:'مكتمل', cancelled:'ملغى' };
+const statuses = { pending:'بانتظار الدفع / التحقق', paid:'تم تأكيد الدفع', preparing:'قيد التجهيز', ready:'جاهز للتسليم', fulfilled:'تم التسليم', cancelled:'ملغى' };
 const money = (fils) => (Number(fils || 0) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
 const trackingCode = (number) => number == null ? '' : String(number).padStart(6, '0');
 const button = (text, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = onClick; return b; };
@@ -40,7 +40,9 @@ async function renderOrders() {
         : 'تأكيد إلغاء الطلب؟';
       if (confirm(prompt)) await updateOrder(order,'cancelled');
     }));
-    if (order.status === 'paid') actions.append(button('تأكيد اكتمال الطلب', async () => { if (confirm('تم تسليم التصميم للعميل؟')) await updateOrder(order,'fulfilled'); }));
+    if (order.status === 'paid') actions.append(button('بدء التجهيز', async () => updateOrder(order, 'preparing')));
+    if (order.status === 'preparing') actions.append(button('اعتماد الجاهزية للتسليم', async () => updateOrder(order, 'ready')));
+    if (order.status === 'ready') actions.append(button('تأكيد التسليم', async () => { if (confirm('هل تم تسليم المنتج فعلياً للعميل؟')) await updateOrder(order,'fulfilled'); }));
     const files = Array.isArray(order.details?.attachments) ? order.details.attachments.slice(0,5) : [];
     const fileBox = document.createElement('div'); fileBox.className = 'actions';
     for (const file of files) {
@@ -62,12 +64,12 @@ async function updateOrder(order, status) {
     'Order not found':'تعذر العثور على الطلب. حدّث الصفحة وحاول مجدداً.',
     'Order is not awaiting payment':'تغيرت حالة الطلب. حدّث القائمة وحاول مجدداً.'
   };
-  say(error ? (reasons[error.message] || `تعذر تحديث الطلب: ${error.message}`) : (status === 'paid' ? 'تم تأكيد الطلب بعد التحقق من التحويل.' : 'تم تحديث حالة الطلب.'));
+  say(error ? (reasons[error.message] || `تعذر تحديث الطلب: ${error.message}`) : ({paid:'تم تأكيد الدفع بعد التحقق الفعلي من التحويل.',preparing:'بدأ تجهيز الطلب.',ready:'أصبح المنتج جاهزاً للتسليم.',fulfilled:'تم تسجيل تسليم المنتج.',cancelled:'تم إلغاء الطلب.'}[status] || 'تم تحديث حالة الطلب.'));
   if (error) return;
   await loadOrders(); await loadReports(); await loadQuickLinks();
 }
 
-const paidOrders = () => orders.filter((o) => ['paid','fulfilled'].includes(o.status));
+const paidOrders = () => orders.filter((o) => ['paid','preparing','ready','fulfilled'].includes(o.status));
 const netAmount = (o) => Math.max(0, Number(o.price_fils || 0) - Number(o.discount_fils || 0));
 const uniqueCustomers = () => new Set(orders.map((o) => String(o.details?.phone || '').trim()).filter(Boolean)).size;
 
