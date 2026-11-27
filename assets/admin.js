@@ -1,37 +1,49 @@
-import { db, $, say, tierNames } from './shared.js';
+import { db, $, say, tierNames, packageFeaturesFor } from './shared.js?v=20261127-tiers2';
 
 let orders = [];
 let services = [];
 let coupons = [];
 let applications = [];
+let employees = [];
 let withdrawals = [];
 let marketersCount = 0;
 let marketers = [];
-const statuses = { pending:'قيد المراجعة', paid:'مدفوع', fulfilled:'مكتمل', cancelled:'ملغى' };
+const statuses = { pending:'بانتظار الدفع / التحقق', paid:'تم تأكيد الدفع', preparing:'قيد التجهيز', ready:'جاهز للتسليم', fulfilled:'تم التسليم', cancelled:'ملغى' };
 const money = (fils) => (Number(fils || 0) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
+const trackingCode = (number) => number == null ? '' : String(number).padStart(6, '0');
 const button = (text, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = onClick; return b; };
 
 async function renderOrders() {
   const query = $('search').value.trim().toLocaleLowerCase();
-  const visible = orders.filter((o) => [o.id,o.service_id,o.details?.name,o.details?.phone,o.payment_reference,o.coupon_code].some((v) => String(v || '').toLocaleLowerCase().includes(query))).slice(0,100);
+  const visible = orders.filter((o) => [o.tracking_number == null ? '' : trackingCode(o.tracking_number),o.id,o.service_id,o.details?.name,o.details?.phone,o.payment_reference,o.coupon_code].some((v) => String(v || '').toLocaleLowerCase().includes(query))).slice(0,100);
   $('orders').replaceChildren(...await Promise.all(visible.map(async (order) => {
-    const card = document.createElement('article'), p = document.createElement('p'), meta = document.createElement('p'), pay = document.createElement('p'), select = document.createElement('select'), actions = document.createElement('div');
-    p.textContent = `${order.id} | ${order.service_id} | ${tierNames[order.package_tier] || tierNames.basic} | ${money(order.price_fils)}${order.discount_fils ? ` (خصم ${money(order.discount_fils)} — ${order.coupon_code || ''})` : ''}`;
+    const card = document.createElement('article'), p = document.createElement('p'), meta = document.createElement('p'), pay = document.createElement('p'), state = document.createElement('p'), actions = document.createElement('div');
+    p.textContent = `طلب ${trackingCode(order.tracking_number) || 'قديم'} | ${order.service_id} | ${tierNames[order.package_tier] || tierNames.basic} | ${money(order.price_fils)}${order.discount_fils ? ` (خصم ${money(order.discount_fils)} — ${order.coupon_code || ''})` : ''}`;
     meta.textContent = `العميل: ${order.details?.name || '—'} | الهاتف: ${order.details?.phone || '—'} | التفاصيل: ${order.details?.text || '—'}`;
     pay.textContent = `حساب CliQ: ${order.cliq_account_id || '—'} | مرجع التحويل: ${order.payment_reference || 'لم يُرسل'}`;
-    select.replaceChildren(...Object.entries(statuses).filter(([key]) => key === order.status || (order.status === 'pending' && ['paid','cancelled'].includes(key)) || (order.status === 'paid' && key === 'fulfilled')).map(([key,label]) => new Option(label,key,false,key === order.status)));
+    state.textContent = `حالة الطلب: ${statuses[order.status] || order.status}`;
     actions.className = 'actions';
-    if (order.status === 'pending' && order.payment_reference) actions.append(button('اعتماد التحويل بعد التحقق', async () => {
-      if (!confirm(`تحقّق من وصول ${money(order.price_fils)} إلى الحساب المحدد ومن تطابق المرجع التالي قبل الاعتماد:\n${order.payment_reference}\n\nسيبدأ توليد التصميم آلياً بعد الاعتماد.`)) return;
-      await updateOrder(order, 'paid');
-    }));
+    if (order.payment_proof_path) {
+      const { data: proof, error: proofError } = await db.storage.from('tamm-order-files').createSignedUrl(order.payment_proof_path, 300);
+      if (!proofError && proof?.signedUrl) { const link=document.createElement('a');link.href=proof.signedUrl;link.target='_blank';link.rel='noopener';link.textContent='عرض إثبات التحويل';actions.append(link); }
+    }
+    if (order.status === 'pending' && order.payment_reference) {
+      const approve=button('تأكيد الطلب بعد التحقق',async()=>{
+        if (!confirm(`تحقّق من وصول ${money(order.price_fils)} فعلياً إلى الحساب ومن تطابق المرجع التالي:\n${order.payment_reference}\n\nبعد التأكيد سيبدأ تجهيز الطلب.`)) return;
+        await updateOrder(order, 'paid');
+      });
+      if (order.payment_proof_required && !order.payment_proof_path) { approve.disabled=true; approve.title='بانتظار إرفاق العميل صورة إثبات التحويل'; }
+      actions.append(approve);
+    }
     if (order.status === 'pending') actions.append(button(order.payment_reference ? 'رفض المرجع / إلغاء' : 'إلغاء الطلب', async () => {
       const prompt = order.payment_reference
         ? 'ألغِ الطلب فقط بعد التأكد من عدم وصول التحويل أو ردّ المبلغ للعميل. هل تأكدت؟'
         : 'تأكيد إلغاء الطلب؟';
       if (confirm(prompt)) await updateOrder(order,'cancelled');
     }));
-    if (order.status === 'paid') actions.append(button('تأكيد اكتمال الطلب', async () => { if (confirm('تم تسليم التصميم للعميل؟')) await updateOrder(order,'fulfilled'); }));
+    if (order.status === 'paid') actions.append(button('بدء التجهيز', async () => updateOrder(order, 'preparing')));
+    if (order.status === 'preparing') actions.append(button('اعتماد الجاهزية للتسليم', async () => updateOrder(order, 'ready')));
+    if (order.status === 'ready') actions.append(button('تأكيد التسليم', async () => { if (confirm('هل تم تسليم المنتج فعلياً للعميل؟')) await updateOrder(order,'fulfilled'); }));
     const files = Array.isArray(order.details?.attachments) ? order.details.attachments.slice(0,5) : [];
     const fileBox = document.createElement('div'); fileBox.className = 'actions';
     for (const file of files) {
@@ -39,17 +51,26 @@ async function renderOrders() {
       if (error || !data?.signedUrl) continue;
       const link = document.createElement('a'); link.href = data.signedUrl; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'ملف العميل: ' + (file.name || 'مرفق'); fileBox.append(link);
     }
-    card.append(p,meta,pay,select,actions,fileBox); return card;
+    if (order.status === 'pending' && !order.payment_reference) pay.textContent += ' — بانتظار إدخال العميل مرجع التحويل وإثباته.';
+    card.append(p,meta,state,pay,actions,fileBox); return card;
   })));
 }
 
 async function updateOrder(order, status) {
-  const { error } = await db.from('orders').update({ status }).eq('id',order.id).eq('status',order.status).select('id').single();
-  say(error ? `تعذر تحديث الطلب: ${error.message}` : (status === 'paid' ? 'تم اعتماد الدفع وبدء التوليد الآلي.' : 'تم تحديث حالة الطلب.'));
+  const { error } = await db.rpc('admin_set_order_status_v1', { p_order: order.id, p_status: status });
+  const reasons={
+    'Admin permission required':'هذا الحساب لا يملك صلاحية تأكيد الطلب.',
+    'Payment proof is required before approval':'لا يمكن تأكيد طلب جديد قبل إرفاق إثبات التحويل.',
+    'Customer has not submitted the transfer reference':'العميل لم يرسل مرجع التحويل بعد.',
+    'Order not found':'تعذر العثور على الطلب. حدّث الصفحة وحاول مجدداً.',
+    'Order is not awaiting payment':'تغيرت حالة الطلب. حدّث القائمة وحاول مجدداً.'
+  };
+  say(error ? (reasons[error.message] || `تعذر تحديث الطلب: ${error.message}`) : ({paid:'تم تأكيد الدفع بعد التحقق الفعلي من التحويل.',preparing:'بدأ تجهيز الطلب.',ready:'أصبح المنتج جاهزاً للتسليم.',fulfilled:'تم تسجيل تسليم المنتج.',cancelled:'تم إلغاء الطلب.'}[status] || 'تم تحديث حالة الطلب.'));
+  if (error) return;
   await loadOrders(); await loadReports(); await loadQuickLinks();
 }
 
-const paidOrders = () => orders.filter((o) => ['paid','fulfilled'].includes(o.status));
+const paidOrders = () => orders.filter((o) => ['paid','preparing','ready','fulfilled'].includes(o.status));
 const netAmount = (o) => Math.max(0, Number(o.price_fils || 0) - Number(o.discount_fils || 0));
 const uniqueCustomers = () => new Set(orders.map((o) => String(o.details?.phone || '').trim()).filter(Boolean)).size;
 
@@ -99,6 +120,7 @@ async function loadQuickLinks() {
     ['الطلبات','orders',orders.length,'▦'],['الخدمات والباقات','services',services.filter((s)=>s.active).length,'▣'],
     ['الكوبونات','coupons',coupons.filter((c)=>c.active).length,'⚑'],['العملاء','customers',uniqueCustomers(),'♟'],
     ['التقارير','reports','الإحصائيات','▥'],['المسوقون','marketers',marketersCount,'♟'],
+    ['الموظفون','employees',employees.length,'♟'],
     ['طلبات الموظفين','applications',applications.filter((a)=>a.status==='pending').length,'♟'],['طلبات السحب','withdrawals',withdrawals.filter((w)=>w.status==='pending').length,'د.أ'],
     ['الإعدادات المالية','finance','CliQ','د.أ']
   ];
@@ -107,7 +129,7 @@ async function loadQuickLinks() {
 
 function renderCustomers() {
   const query=$('customerSearch').value.trim().toLocaleLowerCase(),byPhone=new Map();
-  for(const order of orders){const phone=String(order.details?.phone||'').trim();if(!phone)continue;const customer=byPhone.get(phone)||{phone,name:order.details?.name||'عميل',orders:0,revenue:0,last:order.created_at};customer.orders++;if(['paid','fulfilled'].includes(order.status))customer.revenue+=netAmount(order);if(new Date(order.created_at)>new Date(customer.last)){customer.last=order.created_at;customer.name=order.details?.name||customer.name;}byPhone.set(phone,customer);}
+  for(const order of orders){const phone=String(order.details?.phone||'').trim();if(!phone)continue;const customer=byPhone.get(phone)||{phone,name:order.details?.name||'عميل',orders:0,revenue:0,last:order.created_at};customer.orders++;if(['paid','preparing','ready','fulfilled'].includes(order.status))customer.revenue+=netAmount(order);if(new Date(order.created_at)>new Date(customer.last)){customer.last=order.created_at;customer.name=order.details?.name||customer.name;}byPhone.set(phone,customer);}
   const rows=[...byPhone.values()].filter((c)=>`${c.name} ${c.phone}`.toLocaleLowerCase().includes(query)).sort((a,b)=>new Date(b.last)-new Date(a.last));
   $('customers').replaceChildren(...rows.map((c)=>{const row=document.createElement('article');row.textContent=`${c.name} — ${c.phone} — ${c.orders.toLocaleString('ar-JO')} طلب — إيرادات معتمدة: ${money(c.revenue)}`;return row;}));
 }
@@ -119,7 +141,19 @@ async function loadMarketers() {
   $('marketers').replaceChildren(...marketers.map((item)=>{const row=document.createElement('article'),details=document.createElement('p');details.textContent=`${item.user_id} — ${item.active?'نشط':'متوقف'} — رمز الإحالة: ${item.referral_code}`;const link=document.createElement('a');link.href=`${location.origin}/?ref=${encodeURIComponent(item.referral_code)}`;link.textContent='فتح رابط التسويق';link.target='_blank';link.rel='noopener';row.append(details,link);return row;}));
 }
 
-const pageTitles={home:'الرئيسية',orders:'الطلبات',services:'الخدمات والباقات',coupons:'الحملات والكوبونات',customers:'العملاء',reports:'التقارير والإحصائيات',marketers:'المسوقون',applications:'طلبات الموظفين',withdrawals:'طلبات السحب',finance:'الإعدادات المالية',more:'المزيد'};
+const staffRoleNames={admin:'المدير العام',support:'خدمة العملاء',marketer:'مسوّق'};
+async function loadEmployees() {
+  const {data,error}=await db.rpc('admin_list_staff_v1');
+  if(error)return say('تعذر تحميل الموظفين: '+error.message);
+  employees=data||[];
+  $('employees').replaceChildren(...employees.map((item)=>{
+    const row=document.createElement('article'),details=document.createElement('p');
+    details.textContent=`${item.display_name||item.email||'موظف'} — ${item.email||'بريد غير متاح'} — ${staffRoleNames[item.role]||item.role}`;
+    row.append(details);return row;
+  }));
+}
+
+const pageTitles={home:'الرئيسية',orders:'الطلبات',services:'الخدمات والباقات',coupons:'الحملات والكوبونات',customers:'العملاء',reports:'التقارير والإحصائيات',marketers:'المسوقون',employees:'الموظفون',applications:'طلبات الموظفين',withdrawals:'طلبات السحب',finance:'الإعدادات المالية',more:'المزيد'};
 const currentPage=new URLSearchParams(location.search).get('view');
 const view=Object.prototype.hasOwnProperty.call(pageTitles,currentPage)?currentPage:'home';
 function showPage() {
@@ -145,8 +179,20 @@ async function loadServices() {
     title.textContent=item.title;price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);price.setAttribute('aria-label','السعر بالدينار');
     enabled.type='checkbox';enabled.checked=item.active;row.append(title,price,enabled,document.createTextNode('متاحة'),save);return row;
   }));
-  const {data:packages,error:packageError}=await db.from('service_packages').select('service_id,tier,price_fils').order('service_id');if(packageError)return say(packageError.message);
-  $('packages').replaceChildren(...packages.map((item)=>{const row=document.createElement('article'),price=document.createElement('input'),save=button('حفظ السعر',async()=>{const value=Math.round(Number(price.value)*1000);if(!Number.isSafeInteger(value)||value<1)return say('أدخل سعراً صالحاً.');const{error:updateError}=await db.from('service_packages').update({price_fils:value}).eq('service_id',item.service_id).eq('tier',item.tier).select('tier').single();say(updateError?updateError.message:'تم حفظ السعر.');});row.append(document.createTextNode(`${item.service_id} — ${tierNames[item.tier]} `));price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);row.append(price,save);return row;}));
+  const {data:packages,error:packageError}=await db.from('service_packages').select('service_id,tier,price_fils,enabled').order('service_id');if(packageError)return say(packageError.message);
+  $('packages').replaceChildren(...packages.map((item)=>{
+    const row=document.createElement('article'),price=document.createElement('input'),toggle=document.createElement('input'),label=document.createElement('label'),benefits=document.createElement('ul');
+    for(const feature of packageFeaturesFor(item.service_id,item.tier)){const li=document.createElement('li');li.textContent=feature;benefits.append(li);}
+    const save=button('حفظ الباقة',async()=>{
+      const value=Math.round(Number(price.value)*1000);if(!Number.isSafeInteger(value)||value<1)return say('أدخل سعراً صالحاً.');
+      if(toggle.checked&&!confirm('فعّل هذه الباقة للبيع فقط بعد اكتمال مزاياها وتجربتها. هل أكملت ذلك؟')){toggle.checked=item.enabled;return;}
+      const{error:updateError}=await db.from('service_packages').update({price_fils:value,enabled:toggle.checked}).eq('service_id',item.service_id).eq('tier',item.tier).select('tier').single();
+      say(updateError?updateError.message:'تم حفظ الباقة.');if(!updateError)item.enabled=toggle.checked;
+    });
+    row.append(document.createTextNode(`${item.service_id} — ${tierNames[item.tier]} `));
+    price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);price.setAttribute('aria-label','السعر بالدينار');
+    toggle.type='checkbox';toggle.checked=item.enabled;label.append(toggle,document.createTextNode('متاحة للبيع — فعّل بعد اكتمال المزايا'));row.append(benefits,price,label,save);return row;
+  }));
 }
 
 async function loadCoupons() {
@@ -174,7 +220,7 @@ async function load() {
   $('welcomeName').textContent=adminName;$('dashboardHeader').querySelector('.avatar').textContent=Array.from(adminName.trim())[0]||'ت';
   showPage();$('panel').hidden=false;
   if(view==='home'){
-    await Promise.all([loadOrders(),loadServices(),loadCoupons(),loadStaff()]);
+    await Promise.all([loadOrders(),loadServices(),loadCoupons(),loadStaff(),loadEmployees()]);
     const {count}=await db.from('marketers').select('user_id',{count:'exact',head:true});marketersCount=count||0;
     await loadReports();await loadQuickLinks();
   } else if(view==='orders') await loadOrders();
@@ -183,6 +229,7 @@ async function load() {
   else if(view==='customers'){await loadOrders();renderCustomers();}
   else if(view==='reports'){await loadOrders();await loadReports();}
   else if(view==='marketers') await loadMarketers();
+  else if(view==='employees') await loadEmployees();
   else if(view==='applications'||view==='withdrawals') await loadStaff();
   const pending=view==='home'?orders.filter((o)=>o.status==='pending').length:0;$('alertBadge').textContent=pending.toLocaleString('ar-JO');$('alertBadge').hidden=!pending;
 }
@@ -196,4 +243,5 @@ $('customerSearch').oninput=renderCustomers;
 $('search').oninput=renderOrders;
 $('couponCode').oninput=()=>{$('couponCode').value=$('couponCode').value.toUpperCase().replace(/[^A-Z0-9_-]/g,'');};
 $('couponForm').onsubmit=async(e)=>{e.preventDefault();const code=$('couponCode').value.trim(),max=Number($('couponUses').value)||null,expiry=$('couponExpiry').value?`${$('couponExpiry').value}T23:59:59Z`:null;const{error}=await db.from('coupon_codes').insert({code,discount_percent:Number($('couponPercent').value),max_uses:max,expires_at:expiry});say(error?error.message:'تم إنشاء الكوبون.');if(!error)e.target.reset();await loadCoupons();await loadQuickLinks();};
+$('employeeForm').onsubmit=async(e)=>{e.preventDefault();const button=e.target.querySelector('button[type="submit"]');button.disabled=true;try{const{error}=await db.rpc('admin_add_staff_v1',{p_email:$('employeeEmail').value.trim(),p_role:$('employeeRole').value});const messages={'Verified account not found':'لم نجد حساباً مؤكداً بهذا البريد. اطلب من الموظف إنشاء حساب وتأكيد بريده أولاً.','User already has a staff role':'هذا المستخدم مضاف كموظف بالفعل.','Admin role cannot be assigned here':'لا يمكن منح صلاحية مدير من هذه الخانة.','Invalid staff role':'الدور المختار غير متاح.'};say(error?(messages[error.message]||'تعذرت إضافة الموظف: '+error.message):'تمت إضافة الموظف إلى الفريق.');if(!error){e.target.reset();await loadEmployees();}}finally{button.disabled=false;}};
 await load();

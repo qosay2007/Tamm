@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#101114"><title>تمّ | إكمال الطلب</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;padding:16px;background:radial-gradient(ellipse at 80% 0,#362514,transparent 45%),#101114;color:#f4f0e7;font:16px system-ui}main{max-width:620px;margin:12px auto 40px;padding:clamp(18px,5vw,32px);background:#1b1c21;border:1px solid #665333;border-radius:20px}a{color:#e5bf65}h1,h2{color:#f2cf7d}p{line-height:1.7;color:#d6d1c7}label{display:block;margin:15px 0}input,textarea,select,button{width:100%;padding:13px;margin-top:7px;border:1px solid #665333;border-radius:10px;background:#111217;color:#f4f0e7;font:inherit}button{cursor:pointer;background:#d4af37;color:#171717;font-weight:700;border:0}button:disabled{opacity:.55}#price{font-size:1.3rem;color:#f5d486}.hint{font-size:.9rem;color:#c8bda8}.box{margin:18px 0;padding:16px;border:1px solid #554526;border-radius:14px;background:#141519}#tracking{display:inline-block;margin-top:16px}.check{display:flex;gap:10px;align-items:flex-start}.check input{width:auto;margin:5px 0 0}
+    *{box-sizing:border-box}body{margin:0;padding:16px;background:radial-gradient(ellipse at 80% 0,#362514,transparent 45%),#101114;color:#f4f0e7;font:16px system-ui}main{max-width:620px;margin:12px auto 40px;padding:clamp(18px,5vw,32px);background:#1b1c21;border:1px solid #665333;border-radius:20px}a{color:#e5bf65}h1,h2{color:#f2cf7d}p{line-height:1.7;color:#d6d1c7}label{display:block;margin:15px 0}input,textarea,select,button{width:100%;padding:13px;margin-top:7px;border:1px solid #665333;border-radius:10px;background:#111217;color:#f4f0e7;font:inherit}button{cursor:pointer;background:#d4af37;color:#171717;font-weight:700;border:0}button:disabled{opacity:.55}#price{font-size:1.3rem;color:#f5d486}.hint{font-size:.9rem;color:#c8bda8}.box{margin:18px 0;padding:16px;border:1px solid #554526;border-radius:14px;background:#141519}#tracking{display:inline-block;margin-top:16px}.tracking-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tracking-code{font-size:1.5rem;color:#ffdc79;letter-spacing:.12em}.check{display:flex;gap:10px;align-items:flex-start}.check input{width:auto;margin:5px 0 0}
     @media(min-width:620px){body{padding:24px}}[hidden]{display:none!important}
   </style>
 </head>
@@ -13,6 +13,7 @@
   <a href="/">← العودة للخدمات</a><h1 id="title">إكمال الطلب</h1><p id="price"></p>
   <form id="form" hidden>
     <label>الباقة<select id="tier" required></select></label>
+    <section class="box" aria-labelledby="tierBenefitsTitle"><h2 id="tierBenefitsTitle">مزايا الباقة المختارة</h2><ul id="tierFeatures"></ul></section>
     <label>الاسم<input id="name" required minlength="2" maxlength="100" autocomplete="name"></label>
     <label>رقم الهاتف<input id="phone" type="tel" required minlength="7" maxlength="25" autocomplete="tel" inputmode="tel"></label>
     <div id="fields"></div>
@@ -24,7 +25,9 @@
     <button id="submit" type="submit">تأكيد الطلب</button>
   </form>
   <section id="payment" class="box" hidden><h2>الدفع عبر CliQ</h2><p id="payHint">حوّل المبلغ المعروض إلى الحساب المختار، ثم أدخل مرجع التحويل كما يظهر في تطبيق البنك.</p>
-    <form id="payform"><label>حساب CliQ<select id="cliq" required></select></label><label>مرجع التحويل<input id="reference" required minlength="3" maxlength="150" autocomplete="off"></label><button type="submit">إرسال مرجع التحويل للمراجعة</button></form>
+    <form id="payform"><label>حساب CliQ<select id="cliq" required></select></label><label>مرجع التحويل<input id="reference" required minlength="3" maxlength="150" autocomplete="off"></label><label>صورة إثبات التحويل<input id="paymentProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" required><span class="hint">ارفع صورة واضحة للتحويل، بصيغة JPG أو PNG أو WEBP أو HEIC، حتى 10 ميغابايت.</span></label><button type="submit">إرسال إثبات الدفع للمراجعة</button></form>
   </section>
-  <p id="msg" role="status" aria-live="polite"></p><a id="tracking" hidden>متابعة الطلب</a>
-</main><script type="module" src="./assets/order.js"></script></body></html>
+  <p id="msg" role="status" aria-live="polite"></p>
+  <section id="trackingBox" class="box" hidden><p>رقم تتبع طلبك</p><strong id="trackingNumber" class="tracking-code" dir="ltr"></strong><div class="tracking-actions"><button id="copyTracking" type="button">نسخ الرقم</button><button id="shareTracking" type="button">مشاركة رابط آمن</button></div><p class="hint">رقم التتبع وحده لا يكشف تفاصيل الطلب. احتفظ بالرابط الآمن للمتابعة.</p></section>
+  <a id="tracking" hidden>متابعة الطلب</a>
+</main><script type="module" src="./assets/order.js?v=20261127-tiers2"></script></body></html>
