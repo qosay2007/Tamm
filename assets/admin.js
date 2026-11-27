@@ -1,4 +1,4 @@
-import { db, $, say, tierNames } from './shared.js';
+import { db, $, say, tierNames, packageFeaturesFor } from './shared.js';
 
 let orders = [];
 let services = [];
@@ -167,7 +167,8 @@ async function loadServices() {
   }));
   const {data:packages,error:packageError}=await db.from('service_packages').select('service_id,tier,price_fils,enabled').order('service_id');if(packageError)return say(packageError.message);
   $('packages').replaceChildren(...packages.map((item)=>{
-    const row=document.createElement('article'),price=document.createElement('input'),toggle=document.createElement('input'),label=document.createElement('label');
+    const row=document.createElement('article'),price=document.createElement('input'),toggle=document.createElement('input'),label=document.createElement('label'),benefits=document.createElement('ul');
+    for(const feature of packageFeaturesFor(item.service_id,item.tier)){const li=document.createElement('li');li.textContent=feature;benefits.append(li);}
     const save=button('حفظ الباقة',async()=>{
       const value=Math.round(Number(price.value)*1000);if(!Number.isSafeInteger(value)||value<1)return say('أدخل سعراً صالحاً.');
       if(toggle.checked&&!confirm('فعّل هذه الباقة للبيع فقط بعد اكتمال مزاياها وتجربتها. هل أكملت ذلك؟')){toggle.checked=item.enabled;return;}
@@ -176,7 +177,7 @@ async function loadServices() {
     });
     row.append(document.createTextNode(`${item.service_id} — ${tierNames[item.tier]} `));
     price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);price.setAttribute('aria-label','السعر بالدينار');
-    toggle.type='checkbox';toggle.checked=item.enabled;label.append(toggle,document.createTextNode('متاحة للبيع — فعّل بعد اكتمال المزايا'));row.append(price,label,save);return row;
+    toggle.type='checkbox';toggle.checked=item.enabled;label.append(toggle,document.createTextNode('متاحة للبيع — فعّل بعد اكتمال المزايا'));row.append(benefits,price,label,save);return row;
   }));
 }
 

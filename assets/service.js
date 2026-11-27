@@ -1,4 +1,4 @@
-import { db, $, services, tierNames, tierFeatures, say } from './shared.js';
+import { db, $, services, tierNames, packageFeaturesFor, say } from './shared.js';
 const q = new URLSearchParams(location.search), id = q.get('service'), meta = services[id];
 const money = (fils) => (Number(fils) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
 if (!meta) say('الخدمة غير متاحة. ارجع إلى قائمة الخدمات.');
@@ -17,7 +17,7 @@ else {
       for (const tier of tiers) {
         const card = document.createElement('article'), title = document.createElement('h3'), price = document.createElement('strong'), list = document.createElement('ul'), button = document.createElement('a');
         title.textContent = tierNames[tier.tier]; price.textContent = money(tier.price_fils);
-        const benefits = tier.tier === 'basic' ? meta.features : (meta.tierFeatures?.[tier.tier] || tierFeatures[tier.tier]);
+        const benefits = packageFeaturesFor(id, tier.tier);
         for (const benefit of benefits) { const li = document.createElement('li'); li.textContent = benefit; list.append(li); }
         list.className = 'features-list'; button.className = 'buy'; button.textContent = 'اطلب الآن';
         const params = new URLSearchParams({ service: id, tier: tier.tier }); if (q.get('ref')) params.set('ref', q.get('ref'));

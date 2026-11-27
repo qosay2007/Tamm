@@ -6,6 +6,7 @@ const id = query.get('id');
 const trackingNumber = query.get('number');
 const accessToken = new URLSearchParams(location.hash.slice(1)).get('key');
 const labels = { qr:'رمز QR',cv:'السيرة الذاتية',certificate:'شهادة رقمية',birthday:'بطاقة عيد ميلاد',wedding:'دعوة زفاف',card:'بطاقة أعمال',links:'صفحة الروابط',website:'موقع تعريفي',menu:'منيو إلكتروني',catalog:'كتالوج المنتجات' };
+let qrRenderPromise = null, qrLogoImage = null;
 
 if (trackingNumber && /^[0-9]{6,20}$/.test(trackingNumber) && /^[0-9a-f]{64}$/.test(accessToken || '')) {
   const { data, error } = await db.rpc('get_generated_document_v3', { p_tracking_number: trackingNumber, p_access_token: accessToken });
@@ -72,11 +73,25 @@ async function addQr(container, value, filename = 'TAMM-QR.png') {
   if (!value) return;
   try {
     const canvas = document.createElement('canvas');
-    await QRCode.toCanvas(canvas, value, { width: 320, margin: 4, errorCorrectionLevel: 'H', color: { dark: '#17130b', light: '#ffffff' } });
+    const tier = $('doc').dataset.packageTier || 'basic';
+    const dark = tier === 'vip' ? '#493300' : tier === 'advanced' ? '#65480b' : '#17130b';
+    const rendering = QRCode.toCanvas(canvas, value, { width: 320, margin: 4, errorCorrectionLevel: 'H', color: { dark, light: '#ffffff' } });
+    qrRenderPromise = rendering.then(() => ({ canvas, save }));
     canvas.className = 'product-qr'; canvas.setAttribute('aria-label', 'رمز QR للمشاركة');
     const save = el('a', 'action', 'تنزيل رمز QR بصيغة PNG'); save.download = filename; save.href = canvas.toDataURL('image/png');
     container.append(canvas, save);
+    await rendering;
+    if (qrLogoImage && ['advanced','vip'].includes(tier)) drawQrLogo(canvas, qrLogoImage);
+    save.href = canvas.toDataURL('image/png');
   } catch { container.append(el('p', 'notice', 'تعذر إنشاء رمز QR حالياً.')); }
+}
+
+function drawQrLogo(canvas, image) {
+  const context = canvas.getContext('2d'); if (!context || !image?.naturalWidth) return;
+  const size = Math.round(canvas.width * 0.15), padding = Math.round(size * 0.16);
+  const x = Math.round((canvas.width - size) / 2), y = Math.round((canvas.height - size) / 2);
+  context.fillStyle = '#fff'; context.fillRect(x - padding, y - padding, size + padding * 2, size + padding * 2);
+  context.drawImage(image, x, y, size, size);
 }
 
 function addCountdown(container, date, time = '') {
@@ -244,6 +259,9 @@ async function renderDocument(doc, error) {
   const parsed = parseContent(content.text || ''), { fields, links, items, free } = parsed;
   $('doc').classList.add(doc.service_id, tier);
   $('doc').dataset.tier = tierNames[tier] || tierNames.basic;
+  $('doc').dataset.packageTier = tier;
+  const tierBadge = el('span', `tier-badge ${tier}`, tierNames[tier] || tierNames.basic);
+  $('doc').insertBefore(tierBadge, $('title'));
 
   switch (doc.service_id) {
     case 'cv': buildCv($('content'), fields); break;
@@ -265,11 +283,18 @@ async function renderDocument(doc, error) {
     const url = URL.createObjectURL(object);
     if (String(file.type).startsWith('image/')) {
       const img = el('img', 'attachment-image'); img.src = url; img.alt = file.name || 'صورة مرفقة بالتصميم'; $('attachments').append(img);
+      if (doc.service_id === 'qr' && ['advanced','vip'].includes(tier) && !qrLogoImage) {
+        qrLogoImage = img; await img.decode().catch(() => {});
+      }
     } else {
       const a = el('a', 'action', 'فتح الملف: ' + (file.name || 'ملف مرفق')); a.href = url; a.target = '_blank'; a.rel = 'noopener'; $('attachments').append(a);
     }
   }
-  $('doc').hidden = false; $('print').hidden = false;
-  say(`المنتج الرقمي جاهز — ${tierNames[tier] || tierNames.basic}. يمكنك حفظه أو طباعته من جهازك.`);
+  if (qrLogoImage && doc.service_id === 'qr' && qrRenderPromise) {
+    const qr = await qrRenderPromise;
+    if (qr) { drawQrLogo(qr.canvas, qrLogoImage); qr.save.href = qr.canvas.toDataURL('image/png'); }
+  }
+  $('doc').hidden = false; $('print').hidden = tier === 'vip';
+  say(tier === 'vip' ? `منتج VIP جاهز — ${tierNames[tier]}. استخدم زر الطباعة لحفظ نسخة PDF.` : `المنتج الرقمي جاهز — ${tierNames[tier] || tierNames.basic}.`);
   $('print').onclick = () => window.print();
 }

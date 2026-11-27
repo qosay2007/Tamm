@@ -1,11 +1,11 @@
-import { db, $, services, tierNames, tierFeatures, say, safeFileExtension } from './shared.js';
+import { db, $, services, tierNames, packageFeaturesFor, say, safeFileExtension } from './shared.js';
 
 const q = new URLSearchParams(location.search);
 const serviceId = q.get('service');
 const orderId = q.get('order') || q.get('id');
 let trackingCode = q.get('tracking');
 let accessToken = new URLSearchParams(location.hash.slice(1)).get('key');
-let service, packageRows = [], currentOrder, legacyOrder = false;
+let service, packageRows = [], currentOrder, legacyOrder = false, repeatEditor = null;
 const fmt = (fils) => (Number(fils || 0) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
 function rememberTrackingOrder(code,token){try{const key='tamm_order_access_v1',rows=JSON.parse(localStorage.getItem(key)||'[]').filter(x=>x&&x.expires>Date.now()&&x.number!==code);rows.unshift({number:code,token,expires:Date.now()+30*24*60*60*1000});localStorage.setItem(key,JSON.stringify(rows.slice(0,50)));}catch{}}
 function secureUrl(page) { const url = new URL(page, location.href); url.searchParams.set('number', trackingCode); url.hash = new URLSearchParams({ key: accessToken }).toString(); return url.href; }
@@ -82,18 +82,25 @@ async function initExisting() {
 function addRepeatFields(kind) {
   const wrap = document.createElement('section'); wrap.className = 'box'; wrap.id = 'items';
   const add = document.createElement('button'); add.type = 'button'; add.textContent = kind === 'links' ? 'إضافة رابط' : 'إضافة عنصر';
+  let limit = 5;
+  const refresh = () => { add.disabled = wrap.querySelectorAll('.repeat-row').length >= limit; };
   const append = () => {
-    if (wrap.querySelectorAll('.repeat-row').length >= 15) return;
+    if (wrap.querySelectorAll('.repeat-row').length >= 15 || wrap.querySelectorAll('.repeat-row').length >= limit) return;
     const row = document.createElement('div'); row.className = 'repeat-row box';
     const labels = kind === 'links' ? ['اسم الرابط', 'الرابط HTTPS'] : ['اسم المنتج أو الصنف', 'القسم (اختياري)', 'السعر بالدينار', 'الوصف (اختياري)'];
     for (const label of labels) { const input = document.createElement('input'); input.placeholder = label; input.maxLength = 180; input.required = label === 'اسم المنتج أو الصنف' || label === 'السعر بالدينار' || label === 'اسم الرابط' || label === 'الرابط HTTPS'; input.dataset.label = label;
       if (label.includes('السعر')) { input.type = 'number'; input.min = '0'; input.step = '.001'; }
       if (label.includes('HTTPS')) input.type = 'url'; row.append(input); }
-    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'حذف'; remove.onclick = () => { if (wrap.querySelectorAll('.repeat-row').length > 1) row.remove(); };
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'حذف'; remove.onclick = () => { if (wrap.querySelectorAll('.repeat-row').length > 1) { row.remove(); refresh(); } };
     row.append(remove); wrap.insertBefore(row, add);
+    refresh();
   };
   add.onclick = append; wrap.append(add); append(); $('fields').append(wrap); $('detailsLabel').hidden = true; $('details').required = false;
-  return () => Array.from(wrap.querySelectorAll('.repeat-row')).map((row) => Array.from(row.querySelectorAll('input')).map((input) => input.value.trim()));
+  return {
+    collect: () => Array.from(wrap.querySelectorAll('.repeat-row')).map((row) => Array.from(row.querySelectorAll('input')).map((input) => input.value.trim())),
+    setLimit: (value) => { limit = Math.min(15, Math.max(1, Number(value) || 1)); refresh(); },
+    getLimit: () => limit
+  };
 }
 
 function buildFields(meta) {
@@ -117,8 +124,10 @@ function setPackage(tier) {
   $('uploads').dataset.max = String(uploadMax);
   $('uploads').disabled = uploadMax === 0;
   $('uploads').value = '';
-  $('uploadHint').textContent = uploadMax === 1 ? 'أرفق صورة واحدة اختيارية لتخصيص التصميم، حتى 10 ميغابايت.' : `أرفق حتى ${uploadMax} صور أو ملفات مرجعية، حتى 10 ميغابايت للملف.`;
+  if (repeatEditor) repeatEditor.setLimit(services[serviceId]?.repeatLimits?.[tier] || 15);
+  $('uploadHint').textContent = serviceId === 'qr' ? 'أرفق صورة شعار واحدة اختيارياً ليُضاف إلى وسط الرمز مع الحفاظ على قابليته للمسح، حتى 10 ميغابايت.' : uploadMax === 1 ? 'أرفق صورة واحدة اختيارية لتخصيص التصميم، حتى 10 ميغابايت.' : `أرفق حتى ${uploadMax} صور أو ملفات مرجعية، حتى 10 ميغابايت للملف.`;
   $('price').textContent = `سعر الباقة ${tierNames[tier]}: ${fmt(packageRows.find((item) => item.tier === tier)?.price_fils || service.price_fils)}`;
+  $('tierFeatures').replaceChildren(...packageFeaturesFor(serviceId, tier).map((feature) => { const item = document.createElement('li'); item.textContent = feature; return item; }));
 }
 
 async function uploadFiles(order, files) {
@@ -158,7 +167,7 @@ async function initNew() {
   $('tier').replaceChildren(...packageRows.map((row) => new Option(`${tierNames[row.tier]} — ${fmt(row.price_fils)}`, row.tier)));
   $('tier').value = ['basic','advanced','vip'].includes(q.get('tier')) && packageRows.some((row) => row.tier === q.get('tier')) ? q.get('tier') : 'basic';
   const collectFields = buildFields(meta);
-  const repeatValues = meta.repeat ? addRepeatFields(meta.repeat, serviceId) : null;
+  repeatEditor = meta.repeat ? addRepeatFields(meta.repeat) : null;
   if (meta.fields.length) { $('detailsLabel').hidden = true; $('details').required = false; }
   $('tier').onchange = () => setPackage($('tier').value); setPackage($('tier').value);
   $('form').hidden = false;
@@ -166,8 +175,9 @@ async function initNew() {
     event.preventDefault();
     const fieldRows = collectFields();
     let details = $('details').value.trim();
-    if (repeatValues) {
-      const rows = repeatValues();
+    if (repeatEditor) {
+      const rows = repeatEditor.collect();
+      if (rows.length > repeatEditor.getLimit()) return say(`هذه الباقة تسمح بإضافة ${repeatEditor.getLimit()} عناصر كحد أقصى. قلّل العدد قبل المتابعة.`);
       if (rows.some((row) => meta.repeat === 'links' ? (!row[0] || !row[1]) : (!row[0] || !row[2]))) return say('أكمل الاسم والسعر لكل عنصر قبل الإرسال.');
       if (meta.repeat === 'links') {
         if (rows.some((row) => { try { return new URL(row[1]).protocol !== 'https:'; } catch { return true; } })) return say('استخدم روابط HTTPS صالحة فقط.');
@@ -179,6 +189,7 @@ async function initNew() {
     const tier = $('tier').value, files = Array.from($('uploads').files || []), max = Number($('uploads').dataset.max || 0);
     if (files.length > max) return say(`هذه الباقة تسمح بإرفاق ${max} ملفات كحد أقصى.`);
     if (files.some((file) => !safeFileExtension(file) || file.size < 1 || file.size > 10 * 1024 * 1024)) return say('الملفات المقبولة JPG وPNG وWEBP وHEIC وPDF، بحد أقصى 10 ميغابايت للملف.');
+    if (serviceId === 'qr' && files.some((file) => !String(file.type).startsWith('image/'))) return say('شعار QR يجب أن يكون صورة JPG أو PNG أو WEBP أو HEIC.');
     const button = $('submit'); button.disabled = true;
     try {
       const { data: order, error: submitError } = await db.rpc('submit_guest_package_order_v3', {
