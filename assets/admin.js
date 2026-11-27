@@ -127,7 +127,7 @@ async function loadQuickLinks() {
 
 function renderCustomers() {
   const query=$('customerSearch').value.trim().toLocaleLowerCase(),byPhone=new Map();
-  for(const order of orders){const phone=String(order.details?.phone||'').trim();if(!phone)continue;const customer=byPhone.get(phone)||{phone,name:order.details?.name||'عميل',orders:0,revenue:0,last:order.created_at};customer.orders++;if(['paid','fulfilled'].includes(order.status))customer.revenue+=netAmount(order);if(new Date(order.created_at)>new Date(customer.last)){customer.last=order.created_at;customer.name=order.details?.name||customer.name;}byPhone.set(phone,customer);}
+  for(const order of orders){const phone=String(order.details?.phone||'').trim();if(!phone)continue;const customer=byPhone.get(phone)||{phone,name:order.details?.name||'عميل',orders:0,revenue:0,last:order.created_at};customer.orders++;if(['paid','preparing','ready','fulfilled'].includes(order.status))customer.revenue+=netAmount(order);if(new Date(order.created_at)>new Date(customer.last)){customer.last=order.created_at;customer.name=order.details?.name||customer.name;}byPhone.set(phone,customer);}
   const rows=[...byPhone.values()].filter((c)=>`${c.name} ${c.phone}`.toLocaleLowerCase().includes(query)).sort((a,b)=>new Date(b.last)-new Date(a.last));
   $('customers').replaceChildren(...rows.map((c)=>{const row=document.createElement('article');row.textContent=`${c.name} — ${c.phone} — ${c.orders.toLocaleString('ar-JO')} طلب — إيرادات معتمدة: ${money(c.revenue)}`;return row;}));
 }
