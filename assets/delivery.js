@@ -1,5 +1,5 @@
 import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
-import { db, $, tierNames, say } from './shared.js';
+import { db, $, tierNames, say } from './shared.js?v=20261127-tiers';
 
 const query = new URLSearchParams(location.search);
 const id = query.get('id');

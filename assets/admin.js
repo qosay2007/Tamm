@@ -1,4 +1,4 @@
-import { db, $, say, tierNames, packageFeaturesFor } from './shared.js';
+import { db, $, say, tierNames, packageFeaturesFor } from './shared.js?v=20261127-tiers';
 
 let orders = [];
 let services = [];

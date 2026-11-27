@@ -1,4 +1,4 @@
-import { db, $, services, tierNames, packageFeaturesFor, say, safeFileExtension } from './shared.js';
+import { db, $, services, tierNames, packageFeaturesFor, say, safeFileExtension } from './shared.js?v=20261127-tiers';
 
 const q = new URLSearchParams(location.search);
 const serviceId = q.get('service');
