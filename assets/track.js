@@ -1,4 +1,4 @@
-import { db, $ } from './shared.js?v=20261127-tiers';
+import { db, $ } from './shared.js?v=20261127-tiers2';
 
 const query=new URLSearchParams(location.search);
 const legacyId=query.get('id');

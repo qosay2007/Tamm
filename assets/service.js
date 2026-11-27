@@ -1,4 +1,4 @@
-import { db, $, services, tierNames, packageFeaturesFor, say } from './shared.js?v=20261127-tiers';
+import { db, $, services, tierNames, packageFeaturesFor, say } from './shared.js?v=20261127-tiers2';
 const q = new URLSearchParams(location.search), id = q.get('service'), meta = services[id];
 const money = (fils) => (Number(fils) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
 if (!meta) say('الخدمة غير متاحة. ارجع إلى قائمة الخدمات.');

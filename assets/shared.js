@@ -34,7 +34,7 @@ export function packageFeaturesFor(serviceId, tier) {
     features.push('قالب VIP ذهبي بتنسيق مخصص للخدمة');
   }
   const uploadLimit = Number(meta.uploadLimits?.[tier] || 0);
-  if (uploadLimit) features.push(serviceId === 'qr' ? 'إرفاق شعار واحد للرمز' : `إرفاق حتى ${uploadLimit} صور أو ملفات مرجعية`);
+  if (uploadLimit && tier !== 'basic') features.push(serviceId === 'qr' ? 'إرفاق شعار واحد للرمز' : `إرفاق حتى ${uploadLimit} صور أو ملفات مرجعية`);
   if (tier === 'vip') features.push('زر حفظ أو طباعة المنتج بصيغة PDF');
   return features;
 }
