@@ -149,7 +149,7 @@ async function initNew() {
   const { data: found, error } = await db.from('services').select('id,title,price_fils').eq('id', serviceId).eq('active', true).maybeSingle();
   if (error || !found) { say('تعذر تحميل الخدمة حالياً. حاول مرة أخرى.'); return; }
   service = found; const meta = services[serviceId]; $('title').textContent = service.title;
-  const { data: packages, error: packageError } = await db.from('service_packages').select('tier,price_fils').eq('service_id', serviceId);
+  const { data: packages, error: packageError } = await db.from('service_packages').select('tier,price_fils').eq('service_id', serviceId).eq('enabled', true);
   if (packageError) { say('تعذر تحميل أسعار الباقات. حاول مرة أخرى.'); return; }
   packageRows = [{ tier: 'basic', price_fils: service.price_fils }, ...(packages || [])];
   $('tier').replaceChildren(...packageRows.map((row) => new Option(`${tierNames[row.tier]} — ${fmt(row.price_fils)}`, row.tier)));
@@ -181,7 +181,7 @@ async function initNew() {
         p_service: serviceId, p_tier: tier, p_name: $('name').value.trim(), p_phone: $('phone').value.trim(), p_details: details,
         p_ref: q.get('ref'), p_coupon: $('coupon').value.trim()
       });
-      if (submitError) return say(submitError.message?.includes('coupon') ? 'الكوبون غير صالح أو منتهي أو استُخدم بالكامل.' : 'تعذر حفظ الطلب. تحقق من البيانات وحاول مجدداً.');
+      if (submitError) return say(submitError.message?.includes('coupon') ? 'الكوبون غير صالح أو منتهي أو استُخدم بالكامل.' : submitError.message?.includes('package') ? 'هذه الباقة غير متاحة للبيع حالياً. اختر الباقة الأساسية.' : 'تعذر حفظ الطلب. تحقق من البيانات وحاول مجدداً.');
       currentOrder = order?.order_id; trackingCode = order?.tracking_number; accessToken = order?.access_token;
       if (!currentOrder || !trackingCode || !accessToken) return say('تم حفظ الطلب لكن تعذر تجهيز رابط الوصول الآمن. تواصل مع الدعم قبل الدفع.');
       history.replaceState(null, '', `order.html?tracking=${encodeURIComponent(trackingCode)}#key=${encodeURIComponent(accessToken)}`);

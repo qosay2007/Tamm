@@ -10,7 +10,7 @@ else {
     $('mock').replaceChildren(Object.assign(document.createElement('span'), { textContent: meta.icon }), Object.assign(document.createElement('small'), { textContent: 'تصميم رقمي من تمّ' }));
     $('eta').textContent = `مدة التسليم المستهدفة بعد اعتماد الدفع: ${meta.eta} دقيقة تقريباً.`;
     for (const item of meta.features) { const span = document.createElement('span'); span.textContent = item; $('features').append(span); }
-    const { data: packages, error: packageError } = await db.from('service_packages').select('tier,price_fils').eq('service_id', id);
+    const { data: packages, error: packageError } = await db.from('service_packages').select('tier,price_fils').eq('service_id', id).eq('enabled', true);
     if (packageError) { say('تعذر تحميل الباقات. حاول مرة أخرى.'); }
     else {
       const tiers = [{ tier: 'basic', price_fils: service.price_fils }, ...(packages || []).sort((a,b) => ['advanced','vip'].indexOf(a.tier) - ['advanced','vip'].indexOf(b.tier))];

@@ -163,8 +163,19 @@ async function loadServices() {
     title.textContent=item.title;price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);price.setAttribute('aria-label','السعر بالدينار');
     enabled.type='checkbox';enabled.checked=item.active;row.append(title,price,enabled,document.createTextNode('متاحة'),save);return row;
   }));
-  const {data:packages,error:packageError}=await db.from('service_packages').select('service_id,tier,price_fils').order('service_id');if(packageError)return say(packageError.message);
-  $('packages').replaceChildren(...packages.map((item)=>{const row=document.createElement('article'),price=document.createElement('input'),save=button('حفظ السعر',async()=>{const value=Math.round(Number(price.value)*1000);if(!Number.isSafeInteger(value)||value<1)return say('أدخل سعراً صالحاً.');const{error:updateError}=await db.from('service_packages').update({price_fils:value}).eq('service_id',item.service_id).eq('tier',item.tier).select('tier').single();say(updateError?updateError.message:'تم حفظ السعر.');});row.append(document.createTextNode(`${item.service_id} — ${tierNames[item.tier]} `));price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);row.append(price,save);return row;}));
+  const {data:packages,error:packageError}=await db.from('service_packages').select('service_id,tier,price_fils,enabled').order('service_id');if(packageError)return say(packageError.message);
+  $('packages').replaceChildren(...packages.map((item)=>{
+    const row=document.createElement('article'),price=document.createElement('input'),toggle=document.createElement('input'),label=document.createElement('label');
+    const save=button('حفظ الباقة',async()=>{
+      const value=Math.round(Number(price.value)*1000);if(!Number.isSafeInteger(value)||value<1)return say('أدخل سعراً صالحاً.');
+      if(toggle.checked&&!confirm('فعّل هذه الباقة للبيع فقط بعد اكتمال مزاياها وتجربتها. هل أكملت ذلك؟')){toggle.checked=item.enabled;return;}
+      const{error:updateError}=await db.from('service_packages').update({price_fils:value,enabled:toggle.checked}).eq('service_id',item.service_id).eq('tier',item.tier).select('tier').single();
+      say(updateError?updateError.message:'تم حفظ الباقة.');if(!updateError)item.enabled=toggle.checked;
+    });
+    row.append(document.createTextNode(`${item.service_id} — ${tierNames[item.tier]} `));
+    price.type='number';price.min='.001';price.step='.001';price.value=(item.price_fils/1000).toFixed(3);price.setAttribute('aria-label','السعر بالدينار');
+    toggle.type='checkbox';toggle.checked=item.enabled;label.append(toggle,document.createTextNode('متاحة للبيع — فعّل بعد اكتمال المزايا'));row.append(price,label,save);return row;
+  }));
 }
 
 async function loadCoupons() {
