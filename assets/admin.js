@@ -6,6 +6,7 @@ let coupons = [];
 let applications = [];
 let withdrawals = [];
 let marketersCount = 0;
+let marketers = [];
 const statuses = { pending:'قيد المراجعة', paid:'مدفوع', fulfilled:'مكتمل', cancelled:'ملغى' };
 const money = (fils) => (Number(fils || 0) / 1000).toFixed(3).replace(/\.000$/, '') + ' د.أ';
 const button = (text, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = onClick; return b; };
@@ -95,12 +96,36 @@ async function loadReports() {
 
 async function loadQuickLinks() {
   const cards=[
-    ['الطلبات','sectionOrders',orders.length,'▦'],['الخدمات','sectionServices',services.filter((s)=>s.active).length,'▣'],
-    ['الكوبونات','sectionCoupons',coupons.filter((c)=>c.active).length,'⚑'],['العملاء','sectionOrders',uniqueCustomers(),'♟'],
-    ['التقارير','sectionReports','الإحصائيات','▥'],['المسوقون','sectionPeople',marketersCount,'♟'],
-    ['طلبات الموظفين','sectionPeople',applications.filter((a)=>a.status==='pending').length,'♟'],['طلبات السحب','sectionPeople',withdrawals.filter((w)=>w.status==='pending').length,'د.أ']
+    ['الطلبات','orders',orders.length,'▦'],['الخدمات والباقات','services',services.filter((s)=>s.active).length,'▣'],
+    ['الكوبونات','coupons',coupons.filter((c)=>c.active).length,'⚑'],['العملاء','customers',uniqueCustomers(),'♟'],
+    ['التقارير','reports','الإحصائيات','▥'],['المسوقون','marketers',marketersCount,'♟'],
+    ['طلبات الموظفين','applications',applications.filter((a)=>a.status==='pending').length,'♟'],['طلبات السحب','withdrawals',withdrawals.filter((w)=>w.status==='pending').length,'د.أ'],
+    ['الإعدادات المالية','finance','CliQ','د.أ']
   ];
-  $('quickLinks').replaceChildren(...cards.map(([label,target,count,icon])=>{const a=document.createElement('a');a.className='quick-card';a.href=`#${target}`;const i=document.createElement('span');i.className='quick-icon';i.textContent=icon;const title=document.createElement('span');title.className='quick-label';title.textContent=label;const number=document.createElement('span');number.className='quick-count';number.textContent=typeof count==='number'?count.toLocaleString('ar-JO'):String(count);a.append(i,title,number);return a;}));
+  $('quickLinks').replaceChildren(...cards.map(([label,target,count,icon])=>{const a=document.createElement('a');a.className='quick-card';a.href=`admin.html?view=${target}`;const i=document.createElement('span');i.className='quick-icon';i.textContent=icon;const title=document.createElement('span');title.className='quick-label';title.textContent=label;const number=document.createElement('span');number.className='quick-count';number.textContent=typeof count==='number'?count.toLocaleString('ar-JO'):String(count);a.append(i,title,number);return a;}));
+}
+
+function renderCustomers() {
+  const query=$('customerSearch').value.trim().toLocaleLowerCase(),byPhone=new Map();
+  for(const order of orders){const phone=String(order.details?.phone||'').trim();if(!phone)continue;const customer=byPhone.get(phone)||{phone,name:order.details?.name||'عميل',orders:0,revenue:0,last:order.created_at};customer.orders++;if(['paid','fulfilled'].includes(order.status))customer.revenue+=netAmount(order);if(new Date(order.created_at)>new Date(customer.last)){customer.last=order.created_at;customer.name=order.details?.name||customer.name;}byPhone.set(phone,customer);}
+  const rows=[...byPhone.values()].filter((c)=>`${c.name} ${c.phone}`.toLocaleLowerCase().includes(query)).sort((a,b)=>new Date(b.last)-new Date(a.last));
+  $('customers').replaceChildren(...rows.map((c)=>{const row=document.createElement('article');row.textContent=`${c.name} — ${c.phone} — ${c.orders.toLocaleString('ar-JO')} طلب — إيرادات معتمدة: ${money(c.revenue)}`;return row;}));
+}
+
+async function loadMarketers() {
+  const {data,error}=await db.from('marketers').select('user_id,referral_code,active').order('user_id');
+  if(error)return say('تعذر تحميل المسوقين: '+error.message);
+  marketers=data||[];marketersCount=marketers.length;
+  $('marketers').replaceChildren(...marketers.map((item)=>{const row=document.createElement('article'),details=document.createElement('p');details.textContent=`${item.user_id} — ${item.active?'نشط':'متوقف'} — رمز الإحالة: ${item.referral_code}`;const link=document.createElement('a');link.href=`${location.origin}/?ref=${encodeURIComponent(item.referral_code)}`;link.textContent='فتح رابط التسويق';link.target='_blank';link.rel='noopener';row.append(details,link);return row;}));
+}
+
+const pageTitles={home:'الرئيسية',orders:'الطلبات',services:'الخدمات والباقات',coupons:'الحملات والكوبونات',customers:'العملاء',reports:'التقارير والإحصائيات',marketers:'المسوقون',applications:'طلبات الموظفين',withdrawals:'طلبات السحب',finance:'الإعدادات المالية',more:'المزيد'};
+const currentPage=new URLSearchParams(location.search).get('view');
+const view=Object.prototype.hasOwnProperty.call(pageTitles,currentPage)?currentPage:'home';
+function showPage() {
+  $('pageTitle').textContent=pageTitles[view];
+  document.querySelectorAll('.admin-page').forEach((element)=>{const allowed=(element.dataset.page||'').split(/\s+/);element.hidden=!allowed.includes(view);});
+  document.querySelectorAll('.bottomnav a').forEach((link)=>link.classList.toggle('active',new URL(link.href).searchParams.get('view')===view));
 }
 
 async function loadOrders() {
@@ -147,19 +172,27 @@ async function load() {
   const {data:profile}=await db.from('profiles').select('display_name').eq('user_id',session.user.id).maybeSingle();
   const adminName=profile?.display_name||session.user.email?.split('@')[0]||'المدير';
   $('welcomeName').textContent=adminName;$('dashboardHeader').querySelector('.avatar').textContent=Array.from(adminName.trim())[0]||'ت';
-  $('panel').hidden=false;
-  await Promise.all([loadOrders(),loadServices(),loadCoupons(),loadStaff()]);
-  const {count}=await db.from('marketers').select('user_id',{count:'exact',head:true});marketersCount=count||0;
-  await loadReports();await loadQuickLinks();
-  const pending=orders.filter((o)=>o.status==='pending').length;$('alertBadge').textContent=pending.toLocaleString('ar-JO');$('alertBadge').hidden=!pending;
+  showPage();$('panel').hidden=false;
+  if(view==='home'){
+    await Promise.all([loadOrders(),loadServices(),loadCoupons(),loadStaff()]);
+    const {count}=await db.from('marketers').select('user_id',{count:'exact',head:true});marketersCount=count||0;
+    await loadReports();await loadQuickLinks();
+  } else if(view==='orders') await loadOrders();
+  else if(view==='services') await loadServices();
+  else if(view==='coupons') await loadCoupons();
+  else if(view==='customers'){await loadOrders();renderCustomers();}
+  else if(view==='reports'){await loadOrders();await loadReports();}
+  else if(view==='marketers') await loadMarketers();
+  else if(view==='applications'||view==='withdrawals') await loadStaff();
+  const pending=view==='home'?orders.filter((o)=>o.status==='pending').length:0;$('alertBadge').textContent=pending.toLocaleString('ar-JO');$('alertBadge').hidden=!pending;
 }
 
 $('login').onsubmit=async(e)=>{e.preventDefault();const{error}=await db.auth.signInWithPassword({email:$('email').value,password:$('password').value});if(error)return say(error.message);$('password').value='';await load();};
 $('logout').onclick=async()=>{await db.auth.signOut();await load();};
 $('menuToggle').onclick=()=>{$('quicknav').classList.toggle('open');};
 $('quicknav').addEventListener('click',(event)=>{if(event.target.closest('a'))$('quicknav').classList.remove('open');});
-$('alerts').onclick=()=>document.querySelector('#sectionOrders').scrollIntoView({behavior:'smooth'});
-document.querySelector('.bottomnav').addEventListener('click',(event)=>{const link=event.target.closest('a');if(!link)return;document.querySelectorAll('.bottomnav a').forEach((item)=>item.classList.toggle('active',item===link));});
+$('alerts').onclick=()=>{location.href='admin.html?view=orders';};
+$('customerSearch').oninput=renderCustomers;
 $('search').oninput=renderOrders;
 $('couponCode').oninput=()=>{$('couponCode').value=$('couponCode').value.toUpperCase().replace(/[^A-Z0-9_-]/g,'');};
 $('couponForm').onsubmit=async(e)=>{e.preventDefault();const code=$('couponCode').value.trim(),max=Number($('couponUses').value)||null,expiry=$('couponExpiry').value?`${$('couponExpiry').value}T23:59:59Z`:null;const{error}=await db.from('coupon_codes').insert({code,discount_percent:Number($('couponPercent').value),max_uses:max,expires_at:expiry});say(error?error.message:'تم إنشاء الكوبون.');if(!error)e.target.reset();await loadCoupons();await loadQuickLinks();};

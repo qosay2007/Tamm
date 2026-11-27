@@ -21,37 +21,41 @@
 <body>
   <header class="topbar" id="dashboardHeader" hidden>
     <button id="menuToggle" class="iconbtn" type="button" aria-label="فتح قائمة الإدارة">☰</button>
-    <a class="brand" href="/" aria-label="تمّ الرئيسية"><span class="brandmark">T</span><span class="brandname">تمّ<small>TAMM</small></span></a>
-    <div class="page-title">لوحة الإدارة<br><span class="rolebadge">♛ المدير العام</span></div>
+    <a class="brand" href="admin.html?view=home" aria-label="العودة إلى لوحة الإدارة"><span class="brandmark">T</span><span class="brandname">تمّ<small>TAMM</small></span></a>
+    <div class="page-title"><span id="pageTitle">الرئيسية</span><br><span class="rolebadge">♛ المدير العام</span></div>
     <button id="alerts" class="iconbtn bell" type="button" aria-label="الطلبات المعلقة">🔔<span id="alertBadge" class="badge" hidden>0</span></button>
     <div class="avatar" aria-label="المدير">ت</div>
     <button id="logout" class="mutebtn" type="button">خروج</button>
   </header>
   <nav class="quicknav" id="quicknav" aria-label="أقسام لوحة الإدارة" hidden>
-    <a href="#sectionOrders">الطلبات</a><a href="#sectionReports">التقارير</a><a href="#sectionServices">الخدمات والأسعار</a><a href="#sectionCoupons">الكوبونات</a><a href="#sectionPeople">الموظفون والمسوقون</a><a href="#sectionFinance">CliQ والسحوبات</a>
+    <a href="admin.html?view=home">الرئيسية</a><a href="admin.html?view=orders">الطلبات</a><a href="admin.html?view=services">الخدمات والباقات</a><a href="admin.html?view=coupons">الكوبونات</a><a href="admin.html?view=customers">العملاء</a><a href="admin.html?view=reports">التقارير</a><a href="admin.html?view=marketers">المسوقون</a><a href="admin.html?view=applications">طلبات الموظفين</a><a href="admin.html?view=withdrawals">السحوبات</a><a href="admin.html?view=finance">الإعدادات المالية</a>
   </nav>
   <main class="shell">
     <section id="auth"><h1>تمّ | دخول الإدارة</h1><form id="login"><label>البريد الإلكتروني<input id="email" type="email" required autocomplete="username"></label><label>كلمة المرور<input id="password" type="password" required autocomplete="current-password"></label><button class="primary" type="submit">دخول الإدارة</button></form></section>
     <p id="msg" role="status" aria-live="polite"></p>
     <div id="panel" hidden>
-      <section class="welcome"><div class="welcome-copy"><h1><span class="crown">♛</span> مرحباً، <span id="welcomeName">المدير</span></h1><p>إليك ملخص أداء منصة تمّ اليوم</p></div></section>
-      <div id="stats" class="stats" aria-label="ملخص المنصة"></div><p class="report-note">مؤشرات العملاء والطلبات من أحدث 500 طلب بحد أقصى.</p>
-      <section id="sectionReports" class="section">
+      <section class="welcome admin-page" data-page="home"><div class="welcome-copy"><h1><span class="crown">♛</span> مرحباً، <span id="welcomeName">المدير</span></h1><p>إليك ملخص أداء منصة تمّ اليوم</p></div></section>
+      <div id="stats" class="stats admin-page" data-page="home" aria-label="ملخص المنصة"></div><p class="report-note admin-page" data-page="home">مؤشرات العملاء والطلبات من أحدث 500 طلب بحد أقصى.</p>
+      <section id="sectionReports" class="section admin-page" data-page="home reports">
         <div class="section-head"><h2>إيرادات آخر 7 أيام</h2><span class="crown">⌁</span></div>
         <div class="chart-wrap"><svg id="revenueChart" class="chart" viewBox="0 0 800 220" role="img" aria-label="مخطط إيرادات آخر سبعة أيام"></svg></div>
         <p id="reportNote" class="report-note">الإيرادات من الطلبات التي اعتمدت الإدارة تحويلها.</p>
         <div id="reportStats" class="stats" style="margin-top:12px"></div>
       </section>
-      <h2 class="quick-title">⚡ الوصول السريع</h2>
-      <div class="quick-grid" id="quickLinks"></div>
-      <section id="sectionOrders" class="section manage-section"><div class="section-head"><h2>الطلبات والتحويلات</h2><span class="crown">🛒</span></div><input id="search" class="search" placeholder="بحث برقم الطلب أو الخدمة أو العميل أو الهاتف"><div id="orders"></div></section>
-      <section id="sectionServices" class="section manage-section"><h2>الخدمات والأسعار</h2><div id="services"></div><h3>أسعار الباقات المتقدمة وVIP</h3><div id="packages"></div></section>
-      <section id="sectionCoupons" class="section manage-section"><h2>الحملات والكوبونات</h2><form id="couponForm"><label>رمز الكوبون<input id="couponCode" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_-]+" placeholder="مثال: TAMM10"></label><label>نسبة الخصم %<input id="couponPercent" type="number" min="1" max="90" required value="10"></label><label>عدد الاستخدامات<input id="couponUses" type="number" min="1" placeholder="فارغ = بلا حد"></label><label>ينتهي بتاريخ<input id="couponExpiry" type="date"></label><button class="primary">إنشاء كوبون</button></form><div id="coupons"></div></section>
-      <section id="sectionPeople" class="section manage-section"><h2>طلبات الموظفين والمسوقين</h2><div id="applications"></div><h3>طلبات السحب</h3><div id="withdrawals"></div></section>
-      <section id="sectionFinance" class="section manage-section"><h2>الإعدادات المالية</h2><a class="primary" href="payments-admin.html">إدارة حسابات CliQ</a><p class="report-note">عمولة المسوّق 50% من قيمة الطلب بعد الخصم، وتُحتسب بعد اعتماد التحويل.</p></section>
+      <h2 class="quick-title admin-page" data-page="home">⚡ الوصول السريع</h2>
+      <div class="quick-grid admin-page" data-page="home" id="quickLinks"></div>
+      <section id="sectionOrders" class="section manage-section admin-page" data-page="orders"><div class="section-head"><h2>الطلبات والتحويلات</h2><span class="crown">🛒</span></div><input id="search" class="search" placeholder="بحث برقم الطلب أو الخدمة أو العميل أو الهاتف"><div id="orders"></div></section>
+      <section id="sectionServices" class="section manage-section admin-page" data-page="services"><h2>الخدمات والأسعار</h2><div id="services"></div><h3>أسعار الباقات المتقدمة وVIP</h3><div id="packages"></div></section>
+      <section id="sectionCoupons" class="section manage-section admin-page" data-page="coupons"><h2>الحملات والكوبونات</h2><form id="couponForm"><label>رمز الكوبون<input id="couponCode" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_-]+" placeholder="مثال: TAMM10"></label><label>نسبة الخصم %<input id="couponPercent" type="number" min="1" max="90" required value="10"></label><label>عدد الاستخدامات<input id="couponUses" type="number" min="1" placeholder="فارغ = بلا حد"></label><label>ينتهي بتاريخ<input id="couponExpiry" type="date"></label><button class="primary">إنشاء كوبون</button></form><div id="coupons"></div></section>
+      <section id="sectionCustomers" class="section manage-section admin-page" data-page="customers"><h2>العملاء</h2><p class="report-note">العملاء الذين ظهروا في أحدث 500 طلب، مع إجمالي طلباتهم وإيراداتهم المعتمدة.</p><input id="customerSearch" class="search" placeholder="ابحث باسم العميل أو رقم الهاتف"><div id="customers"></div></section>
+      <section id="sectionMarketers" class="section manage-section admin-page" data-page="marketers"><h2>المسوقون وروابطهم</h2><div id="marketers"></div></section>
+      <section id="sectionApplications" class="section manage-section admin-page" data-page="applications"><h2>طلبات الموظفين والمسوقين</h2><div id="applications"></div></section>
+      <section id="sectionWithdrawals" class="section manage-section admin-page" data-page="withdrawals"><h2>طلبات السحب</h2><div id="withdrawals"></div></section>
+      <section id="sectionFinance" class="section manage-section admin-page" data-page="finance"><h2>الإعدادات المالية</h2><a class="primary" href="payments-admin.html">إدارة حسابات CliQ</a><p class="report-note">عمولة المسوّق 50% من قيمة الطلب بعد الخصم، وتُحتسب بعد اعتماد التحويل.</p></section>
+      <section id="sectionMore" class="section manage-section admin-page" data-page="more"><h2>المزيد من أقسام الإدارة</h2><div class="quick-grid"><a class="quick-card" href="admin.html?view=customers">العملاء</a><a class="quick-card" href="admin.html?view=marketers">المسوقون</a><a class="quick-card" href="admin.html?view=applications">طلبات الموظفين</a><a class="quick-card" href="admin.html?view=withdrawals">السحوبات</a><a class="quick-card" href="admin.html?view=finance">الإعدادات المالية</a></div></section>
       <p id="footerNote" class="footer-note">تمّ | لوحة الإدارة</p>
     </div>
   </main>
-  <nav class="bottomnav" aria-label="التنقل السريع" hidden><a href="#panel"><span class="nav-icon">▦</span><span>الرئيسية</span></a><a href="#sectionOrders"><span class="nav-icon">🛒</span><span>الطلبات</span></a><a href="#panel" class="active" aria-current="page"><span class="nav-icon">⌂</span><span>اللوحة</span></a><a href="#sectionReports"><span class="nav-icon">▥</span><span>التقارير</span></a><a href="#quickLinks"><span class="nav-icon">•••</span><span>المزيد</span></a></nav>
+  <nav class="bottomnav" aria-label="التنقل السريع" hidden><a href="admin.html?view=home"><span class="nav-icon">▦</span><span>الرئيسية</span></a><a href="admin.html?view=orders"><span class="nav-icon">🛒</span><span>الطلبات</span></a><a href="admin.html?view=services"><span class="nav-icon">⌂</span><span>الخدمات</span></a><a href="admin.html?view=reports"><span class="nav-icon">▥</span><span>التقارير</span></a><a href="admin.html?view=more"><span class="nav-icon">•••</span><span>المزيد</span></a></nav>
   <script type="module" src="./assets/admin.js"></script>
 </body></html>
