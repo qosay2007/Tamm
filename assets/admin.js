@@ -4,6 +4,7 @@ let orders = [];
 let services = [];
 let coupons = [];
 let applications = [];
+let employees = [];
 let withdrawals = [];
 let marketersCount = 0;
 let marketers = [];
@@ -119,6 +120,7 @@ async function loadQuickLinks() {
     ['الطلبات','orders',orders.length,'▦'],['الخدمات والباقات','services',services.filter((s)=>s.active).length,'▣'],
     ['الكوبونات','coupons',coupons.filter((c)=>c.active).length,'⚑'],['العملاء','customers',uniqueCustomers(),'♟'],
     ['التقارير','reports','الإحصائيات','▥'],['المسوقون','marketers',marketersCount,'♟'],
+    ['الموظفون','employees',employees.length,'♟'],
     ['طلبات الموظفين','applications',applications.filter((a)=>a.status==='pending').length,'♟'],['طلبات السحب','withdrawals',withdrawals.filter((w)=>w.status==='pending').length,'د.أ'],
     ['الإعدادات المالية','finance','CliQ','د.أ']
   ];
@@ -139,7 +141,19 @@ async function loadMarketers() {
   $('marketers').replaceChildren(...marketers.map((item)=>{const row=document.createElement('article'),details=document.createElement('p');details.textContent=`${item.user_id} — ${item.active?'نشط':'متوقف'} — رمز الإحالة: ${item.referral_code}`;const link=document.createElement('a');link.href=`${location.origin}/?ref=${encodeURIComponent(item.referral_code)}`;link.textContent='فتح رابط التسويق';link.target='_blank';link.rel='noopener';row.append(details,link);return row;}));
 }
 
-const pageTitles={home:'الرئيسية',orders:'الطلبات',services:'الخدمات والباقات',coupons:'الحملات والكوبونات',customers:'العملاء',reports:'التقارير والإحصائيات',marketers:'المسوقون',applications:'طلبات الموظفين',withdrawals:'طلبات السحب',finance:'الإعدادات المالية',more:'المزيد'};
+const staffRoleNames={admin:'المدير العام',support:'خدمة العملاء',marketer:'مسوّق'};
+async function loadEmployees() {
+  const {data,error}=await db.rpc('admin_list_staff_v1');
+  if(error)return say('تعذر تحميل الموظفين: '+error.message);
+  employees=data||[];
+  $('employees').replaceChildren(...employees.map((item)=>{
+    const row=document.createElement('article'),details=document.createElement('p');
+    details.textContent=`${item.display_name||item.email||'موظف'} — ${item.email||'بريد غير متاح'} — ${staffRoleNames[item.role]||item.role}`;
+    row.append(details);return row;
+  }));
+}
+
+const pageTitles={home:'الرئيسية',orders:'الطلبات',services:'الخدمات والباقات',coupons:'الحملات والكوبونات',customers:'العملاء',reports:'التقارير والإحصائيات',marketers:'المسوقون',employees:'الموظفون',applications:'طلبات الموظفين',withdrawals:'طلبات السحب',finance:'الإعدادات المالية',more:'المزيد'};
 const currentPage=new URLSearchParams(location.search).get('view');
 const view=Object.prototype.hasOwnProperty.call(pageTitles,currentPage)?currentPage:'home';
 function showPage() {
@@ -206,7 +220,7 @@ async function load() {
   $('welcomeName').textContent=adminName;$('dashboardHeader').querySelector('.avatar').textContent=Array.from(adminName.trim())[0]||'ت';
   showPage();$('panel').hidden=false;
   if(view==='home'){
-    await Promise.all([loadOrders(),loadServices(),loadCoupons(),loadStaff()]);
+    await Promise.all([loadOrders(),loadServices(),loadCoupons(),loadStaff(),loadEmployees()]);
     const {count}=await db.from('marketers').select('user_id',{count:'exact',head:true});marketersCount=count||0;
     await loadReports();await loadQuickLinks();
   } else if(view==='orders') await loadOrders();
@@ -215,6 +229,7 @@ async function load() {
   else if(view==='customers'){await loadOrders();renderCustomers();}
   else if(view==='reports'){await loadOrders();await loadReports();}
   else if(view==='marketers') await loadMarketers();
+  else if(view==='employees') await loadEmployees();
   else if(view==='applications'||view==='withdrawals') await loadStaff();
   const pending=view==='home'?orders.filter((o)=>o.status==='pending').length:0;$('alertBadge').textContent=pending.toLocaleString('ar-JO');$('alertBadge').hidden=!pending;
 }
@@ -228,4 +243,5 @@ $('customerSearch').oninput=renderCustomers;
 $('search').oninput=renderOrders;
 $('couponCode').oninput=()=>{$('couponCode').value=$('couponCode').value.toUpperCase().replace(/[^A-Z0-9_-]/g,'');};
 $('couponForm').onsubmit=async(e)=>{e.preventDefault();const code=$('couponCode').value.trim(),max=Number($('couponUses').value)||null,expiry=$('couponExpiry').value?`${$('couponExpiry').value}T23:59:59Z`:null;const{error}=await db.from('coupon_codes').insert({code,discount_percent:Number($('couponPercent').value),max_uses:max,expires_at:expiry});say(error?error.message:'تم إنشاء الكوبون.');if(!error)e.target.reset();await loadCoupons();await loadQuickLinks();};
+$('employeeForm').onsubmit=async(e)=>{e.preventDefault();const button=e.target.querySelector('button[type="submit"]');button.disabled=true;try{const{error}=await db.rpc('admin_add_staff_v1',{p_email:$('employeeEmail').value.trim(),p_role:$('employeeRole').value});const messages={'Verified account not found':'لم نجد حساباً مؤكداً بهذا البريد. اطلب من الموظف إنشاء حساب وتأكيد بريده أولاً.','User already has a staff role':'هذا المستخدم مضاف كموظف بالفعل.','Admin role cannot be assigned here':'لا يمكن منح صلاحية مدير من هذه الخانة.','Invalid staff role':'الدور المختار غير متاح.'};say(error?(messages[error.message]||'تعذرت إضافة الموظف: '+error.message):'تمت إضافة الموظف إلى الفريق.');if(!error){e.target.reset();await loadEmployees();}}finally{button.disabled=false;}};
 await load();

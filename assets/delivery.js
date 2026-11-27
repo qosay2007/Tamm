@@ -1,4 +1,3 @@
-import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
 import { db, $, tierNames, say } from './shared.js?v=20261127-tiers2';
 
 const query = new URLSearchParams(location.search);
@@ -6,17 +5,33 @@ const id = query.get('id');
 const trackingNumber = query.get('number');
 const accessToken = new URLSearchParams(location.hash.slice(1)).get('key');
 const labels = { qr:'رمز QR',cv:'السيرة الذاتية',certificate:'شهادة رقمية',birthday:'بطاقة عيد ميلاد',wedding:'دعوة زفاف',card:'بطاقة أعمال',links:'صفحة الروابط',website:'موقع تعريفي',menu:'منيو إلكتروني',catalog:'كتالوج المنتجات' };
-let qrRenderPromise = null, qrLogoImage = null;
+let qrRenderPromise = null, qrLogoImage = null, qrCodePromise = null;
+const loadQrCode = () => qrCodePromise ||= import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm').then((module) => module.default || module);
+const withTimeout = (promise, ms = 15000) => {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = window.setTimeout(() => reject(new Error('timeout')), ms); })]).finally(() => window.clearTimeout(timer));
+};
 
-if (trackingNumber && /^[0-9]{6,20}$/.test(trackingNumber) && /^[0-9a-f]{64}$/.test(accessToken || '')) {
-  const { data, error } = await db.rpc('get_generated_document_v3', { p_tracking_number: trackingNumber, p_access_token: accessToken });
-  await renderDocument(data?.[0], error);
-} else if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
-  say('رابط الاستلام غير صالح.');
-} else {
-  const { data, error } = await db.rpc('get_generated_document', { p_order: id });
-  await renderDocument(data?.[0], error);
+async function loadDocument() {
+  $('retry').hidden = true; $('doc').hidden = true; $('content').replaceChildren(); $('attachments').replaceChildren();
+  say('جاري تحميل التصميم…');
+  try {
+    let result;
+    if (trackingNumber && /^[0-9]{6,20}$/.test(trackingNumber) && /^[0-9a-f]{64}$/.test(accessToken || '')) {
+      result = await withTimeout(db.rpc('get_generated_document_v3', { p_tracking_number: trackingNumber, p_access_token: accessToken }));
+    } else if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      say('رابط الاستلام غير مكتمل أو غير صالح. افتح رابط التسليم من صفحة طلباتي.'); return;
+    } else {
+      result = await withTimeout(db.rpc('get_generated_document', { p_order: id }));
+    }
+    await renderDocument(result?.data?.[0], result?.error);
+  } catch (error) {
+    say(error?.message === 'timeout' ? 'استغرق تحميل التصميم وقتاً أطول من المعتاد. افحص اتصال الإنترنت ثم أعد المحاولة.' : 'تعذر تحميل التصميم حالياً. افحص اتصال الإنترنت ثم أعد المحاولة.');
+    $('retry').hidden = false;
+  }
 }
+$('retry').onclick = loadDocument;
+await loadDocument();
 
 const el = (tag, className = '', text = '') => {
   const item = document.createElement(tag);
@@ -72,6 +87,7 @@ function infoRows(container, entries) {
 async function addQr(container, value, filename = 'TAMM-QR.png') {
   if (!value) return;
   try {
+    const QRCode = await loadQrCode();
     const canvas = document.createElement('canvas');
     const tier = $('doc').dataset.packageTier || 'basic';
     const dark = tier === 'vip' ? '#493300' : tier === 'advanced' ? '#65480b' : '#17130b';
@@ -254,7 +270,7 @@ function buildProductList(container, fields, items, serviceId) {
 }
 
 async function renderDocument(doc, error) {
-  if (error || !doc) { say('التصميم غير متاح بعد أو أن رابط الوصول غير صالح.'); return; }
+  if (error || !doc) { say('التصميم غير متاح بعد أو أن رابط الوصول غير صالح. إذا أكدت الإدارة الدفع للتو، أعد المحاولة بعد لحظات.'); $('retry').hidden = false; return; }
   const content = doc.content || {}, tier = content.package_tier || 'basic';
   const parsed = parseContent(content.text || ''), { fields, links, items, free } = parsed;
   $('doc').classList.add(doc.service_id, tier);
